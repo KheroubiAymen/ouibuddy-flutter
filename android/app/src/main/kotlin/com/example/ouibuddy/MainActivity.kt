@@ -1,4 +1,4 @@
-package com.example.ouibuddy
+package com.ouibuddy.ouibuddy
 
 import io.flutter.embedding.android.FlutterActivity
 

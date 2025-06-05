@@ -1,0 +1,30 @@
+workflows:
+  ios-workflow:
+    name: iOS Workflow
+    environment:
+      ios_signing:
+        distribution_type: ad_hoc
+        bundle_identifier: com.ouibuddy.ouibuddy
+      flutter: stable
+    scripts:
+      - name: Set up code signing settings on Xcode project
+        script: |
+          xcode-project use-profiles
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+      - name: Flutter build
+        script: |
+          flutter build ios --release --no-codesign
+      - name: Xcode build
+        script: |
+          xcode-project build-ipa \
+            --workspace ios/Runner.xcworkspace \
+            --scheme Runner
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      # Pour tester sans App Store Connect
+      email:
+        recipients:
+          - votre-email@exemple.com
