@@ -2,14 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
+import 'evaluation_service.dart';
+import 'evaluation_widgets.dart';
+import 'evaluation_scheduler.dart';
+import 'BackgroundNotificationService.dart'; // NOUVEAU IMPORT
 import 'dart:convert';
-import 'notification_service.dart'; // NOUVEAU IMPORT
+import 'package:flutter/services.dart';
+import 'dart:async';
+import 'notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // NOUVEAU : Initialiser les notifications avant runApp
+  // Initialiser les notifications
   await NotificationService.initialize();
+
+  // NOUVEAU : Initialiser le service de rappels automatiques
+  await BackgroundNotificationService.initialize();
 
   runApp(const MyApp());
 }
@@ -29,9 +38,6 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
-// SUPPRIMÉ : L'ancienne classe NotificationService
-// Elle est maintenant dans notification_service.dart
 
 // Modèle pour les données utilisateur
 class UserProfile {
@@ -96,27 +102,51 @@ class WebViewPage extends StatefulWidget {
   State<WebViewPage> createState() => _WebViewPageState();
 }
 
-class _WebViewPageState extends State<WebViewPage> {
+class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   late final WebViewController controller;
   bool isLoading = true;
+  bool wasInBackground = false;
+  DateTime? lastBackgroundTime;
   bool hasError = false;
   int retryCount = 0;
   String? sessionToken;
   UserProfile userProfile = UserProfile.loading();
   bool notificationsInitialized = false;
   bool isCheckingAuth = false;
+  List<Evaluation> upcomingEvaluations = [];
+  EvaluationSummary? evaluationSummary;
+  bool isLoadingEvaluations = false;
+  String? evaluationError;
+  bool showEvaluations = false;
 
   @override
   void initState() {
     super.initState();
     initializeNotifications();
     initController();
+    WidgetsBinding.instance.addObserver(this);
+
+    // NOUVEAU : Vérifier les rappels au démarrage
+    _checkBackgroundReminders();
   }
 
-  // NOUVELLE méthode d'initialisation des notifications
+  // NOUVELLE méthode : Vérifier les rappels au démarrage
+  Future<void> _checkBackgroundReminders() async {
+    // Attendre que l'utilisateur soit connecté
+    await Future.delayed(const Duration(seconds: 10));
+
+    if (userProfile.id != null && upcomingEvaluations.isNotEmpty) {
+      await BackgroundNotificationService.checkAndReschedule(
+        userProfile.firstName,
+        userProfile.id!,
+        upcomingEvaluations,
+      );
+    }
+  }
+
+  // Initialisation des notifications
   Future<void> initializeNotifications() async {
     try {
-      // Vérifier si les notifications sont autorisées
       final bool enabled = await NotificationService.areNotificationsEnabled();
 
       setState(() {
@@ -137,7 +167,7 @@ class _WebViewPageState extends State<WebViewPage> {
     }
   }
 
-  // NOUVELLE méthode pour demander l'autorisation des notifications
+  // Méthode pour demander l'autorisation des notifications
   void _showNotificationPermissionDialog() {
     if (mounted) {
       showDialog(
@@ -243,11 +273,11 @@ class _WebViewPageState extends State<WebViewPage> {
     });
     controller.reload();
   }
+
   // Surveiller les changements d'URL
   Future<void> monitorUrlChanges() async {
     try {
       await controller.runJavaScript('''
-        // Surveiller les changements d'URL
         let lastUrl = window.location.href;
         
         setInterval(function() {
@@ -255,7 +285,6 @@ class _WebViewPageState extends State<WebViewPage> {
             lastUrl = window.location.href;
             console.log('🔄 URL changée:', lastUrl);
             
-            // Si on arrive sur le dashboard, essayer d'extraire le profil
             if (lastUrl.includes('/dashboard') || lastUrl.includes('/profile')) {
               console.log('📍 Sur une page authentifiée, extraction du profil...');
               setTimeout(function() {
@@ -270,7 +299,7 @@ class _WebViewPageState extends State<WebViewPage> {
     }
   }
 
-  // Méthode principale corrigée pour extraire session et profil
+  // Méthode principale pour extraire session et profil
   Future<void> extractSessionAndProfile() async {
     if (isCheckingAuth) {
       print('⚠️ Vérification d\'authentification déjà en cours...');
@@ -334,7 +363,7 @@ class _WebViewPageState extends State<WebViewPage> {
     }
   }
 
-  // Méthode corrigée pour extraire les informations de session Laravel
+  // Méthode pour extraire les informations de session Laravel
   Future<Map<String, dynamic>?> extractLaravelSession() async {
     try {
       print('🔍 Extraction session Laravel...');
@@ -351,7 +380,6 @@ class _WebViewPageState extends State<WebViewPage> {
               hasSession: false
             };
             
-            // Extraire les cookies Laravel spécifiques
             const cookieArray = cookies.split(';');
             for (let cookie of cookieArray) {
               const [name, value] = cookie.trim().split('=');
@@ -364,13 +392,11 @@ class _WebViewPageState extends State<WebViewPage> {
               }
             }
             
-            // Récupérer le token CSRF depuis les meta tags
             const csrfMeta = document.querySelector('meta[name="csrf-token"]');
             if (csrfMeta) {
               sessionInfo.csrf_token = csrfMeta.getAttribute('content');
             }
             
-            // Vérifier si on a les éléments d'une session active
             sessionInfo.hasActiveSession = sessionInfo.laravel_session && 
                                           (sessionInfo.xsrf_token || sessionInfo.csrf_token);
             
@@ -385,7 +411,6 @@ class _WebViewPageState extends State<WebViewPage> {
       ''');
 
       if (result != null && result.toString() != 'null') {
-        // Méthode de parsing robuste
         String cleanResult = result.toString();
 
         if (cleanResult.startsWith('"') && cleanResult.endsWith('"')) {
@@ -394,8 +419,6 @@ class _WebViewPageState extends State<WebViewPage> {
 
         cleanResult = cleanResult.replaceAll('\\"', '"');
         cleanResult = cleanResult.replaceAll('\\\\', '\\');
-
-        print('🔍 Session data (cleaned): $cleanResult');
 
         final sessionData = json.decode(cleanResult);
         print('🍪 Données session parsées: $sessionData');
@@ -427,9 +450,6 @@ class _WebViewPageState extends State<WebViewPage> {
         final cookieString = cookies.toString().replaceAll('"', '');
         final csrfString = csrfToken?.toString().replaceAll('"', '');
 
-        print('🍪 Cookies bruts: $cookieString');
-        print('🔒 CSRF Token: $csrfString');
-
         bool hasLaravelSession = cookieString.contains('laravel_session');
         bool hasXSRF = cookieString.contains('XSRF-TOKEN');
 
@@ -451,7 +471,7 @@ class _WebViewPageState extends State<WebViewPage> {
     }
   }
 
-  // Méthode corrigée pour vérifier l'authentification
+  // Méthode pour vérifier l'authentification
   Future<bool> checkAuthenticationStatus() async {
     try {
       print('🔍 Vérification du statut d\'authentification...');
@@ -461,36 +481,21 @@ class _WebViewPageState extends State<WebViewPage> {
           try {
             const checks = {
               currentUrl: window.location.href,
-              
-              // Vérifier les cookies Laravel spécifiques
               hasLaravelSession: document.cookie.includes('laravel_session'),
               hasXSRFToken: document.cookie.includes('XSRF-TOKEN'),
-              
-              // Vérifier le token CSRF dans les meta tags
               hasCSRFToken: document.querySelector('meta[name="csrf-token"]') !== null,
-              
-              // Vérifier les éléments UI d'utilisateur connecté
               hasUserElements: document.querySelector('.user-info, .profile-info, [data-user], .logout-btn, .dashboard, .user-dropdown') !== null,
-              
-              // Vérifier si on est sur une page qui nécessite une authentification
               isOnPrivatePage: window.location.href.includes('/dashboard') ||
                               window.location.href.includes('/profile') ||
                               window.location.href.includes('/admin') ||
                               window.location.href.includes('/user'),
-              
-              // Vérifier si on est sur la page de login
               isOnLoginPage: window.location.href.includes('/login') ||
                             window.location.href.includes('/auth') ||
                             document.querySelector('form[action*="login"], input[name="email"][type="email"]') !== null,
-              
-              // Compter les cookies pour diagnostic
               cookiesCount: document.cookie.split(';').filter(c => c.trim()).length,
-              
-              // Vérifier si on a un ID utilisateur dans l'URL
               hasUserIdInUrl: /\\/\\d+\\//.test(window.location.pathname)
             };
             
-            // Logique d'authentification plus permissive
             const isAuthenticated = (
               checks.hasLaravelSession || 
               checks.hasXSRFToken || 
@@ -522,10 +527,7 @@ class _WebViewPageState extends State<WebViewPage> {
         cleanResult = cleanResult.replaceAll('\\"', '"');
         cleanResult = cleanResult.replaceAll('\\\\', '\\');
 
-        print('🔍 Auth status (cleaned): $cleanResult');
-
         final authStatus = json.decode(cleanResult);
-        print('🔍 Statut authentification parsé: $authStatus');
         return authStatus['isAuthenticated'] == true;
       }
 
@@ -546,17 +548,11 @@ class _WebViewPageState extends State<WebViewPage> {
         final urlString = url.toString().replaceAll('"', '');
         final pathString = pathname.toString().replaceAll('"', '');
 
-        print('🌐 URL simple: $urlString');
-        print('📍 Path simple: $pathString');
-
         bool onDashboard = urlString.contains('/dashboard');
         bool hasIdInPath = RegExp(r'/\d+/').hasMatch(pathString);
         bool notOnLogin = !urlString.contains('/login');
 
         bool isAuth = onDashboard && hasIdInPath && notOnLogin;
-
-        print('🔍 Auth simple - Dashboard: $onDashboard, ID: $hasIdInPath, NotLogin: $notOnLogin = $isAuth');
-
         return isAuth;
       }
 
@@ -566,6 +562,7 @@ class _WebViewPageState extends State<WebViewPage> {
       return false;
     }
   }
+
   // Récupérer le profil utilisateur via WebView avec l'API Laravel
   Future<void> fetchUserProfileViaWebView() async {
     try {
@@ -574,12 +571,9 @@ class _WebViewPageState extends State<WebViewPage> {
       final result = await controller.runJavaScriptReturningResult('''
         (async function() {
           try {
-            console.log('🚀 Début appel API profile...');
-            
             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
             
             if (!csrfToken) {
-              console.warn('⚠️ Pas de token CSRF trouvé');
               return JSON.stringify({
                 success: false,
                 error: 'Token CSRF manquant',
@@ -598,11 +592,8 @@ class _WebViewPageState extends State<WebViewPage> {
               credentials: 'same-origin'
             });
             
-            console.log('📡 Status:', response.status);
-            
             if (response.ok) {
               const data = await response.json();
-              console.log('✅ Données reçues:', data);
               return JSON.stringify({
                 success: true,
                 data: data,
@@ -610,7 +601,6 @@ class _WebViewPageState extends State<WebViewPage> {
               });
             } else {
               const errorText = await response.text();
-              console.error('❌ Erreur HTTP:', response.status, errorText);
               return JSON.stringify({
                 success: false,
                 status: response.status,
@@ -619,7 +609,6 @@ class _WebViewPageState extends State<WebViewPage> {
               });
             }
           } catch (error) {
-            console.error('❌ Erreur fetch:', error);
             return JSON.stringify({
               success: false,
               error: error.message,
@@ -639,7 +628,7 @@ class _WebViewPageState extends State<WebViewPage> {
     }
   }
 
-  // Extraire le profil depuis l'URL (méthode améliorée)
+  // Extraire le profil depuis l'URL
   Future<void> extractProfileFromUrl() async {
     try {
       print('🔍 Extraction profil depuis URL...');
@@ -652,17 +641,13 @@ class _WebViewPageState extends State<WebViewPage> {
             extracted_from: 'url'
           };
           
-          // Extraire l'ID depuis l'URL comme /62/dashboard
           const urlMatch = window.location.pathname.match(/\\/(\\d+)\\//);
           if (urlMatch) {
             profile.id = parseInt(urlMatch[1]);
-            console.log('📍 ID trouvé dans URL:', profile.id);
           }
           
-          // Essayer de trouver le nom dans le contenu de la page
           const textContent = document.body.innerText || document.body.textContent || '';
           
-          // Patterns améliorés pour trouver le prénom
           const namePatterns = [
             /Bonjour\\s+([A-Za-zÀ-ÿ]{2,})/i,
             /Salut\\s+([A-Za-zÀ-ÿ]{2,})/i,
@@ -678,12 +663,10 @@ class _WebViewPageState extends State<WebViewPage> {
             const match = textContent.match(pattern);
             if (match && match[1] && match[1].length > 1) {
               profile.first_name = match[1];
-              console.log('📝 Prénom trouvé avec pattern:', profile.first_name);
               break;
             }
           }
           
-          // Chercher dans les éléments avec des classes/id spécifiques
           const nameSelectors = [
             '.user-name',
             '.username', 
@@ -702,7 +685,6 @@ class _WebViewPageState extends State<WebViewPage> {
               const nameMatch = text.match(/([A-Za-zÀ-ÿ]{2,})/);
               if (nameMatch && nameMatch[1] && nameMatch[1].length > 1) {
                 profile.first_name = nameMatch[1];
-                console.log('🏷️ Prénom trouvé dans élément:', profile.first_name);
                 break;
               }
             }
@@ -764,7 +746,6 @@ class _WebViewPageState extends State<WebViewPage> {
       cleanResult = cleanResult.replaceAll('\\\\', '\\');
 
       final response = json.decode(cleanResult);
-      print('📋 Réponse API: $response');
 
       if (response['success'] == true && response['data'] != null) {
         final apiData = response['data'];
@@ -789,7 +770,6 @@ class _WebViewPageState extends State<WebViewPage> {
       }
     } catch (parseError) {
       print('❌ Erreur parsing: $parseError');
-      print('❌ Données: $resultString');
     }
   }
 
@@ -840,7 +820,7 @@ class _WebViewPageState extends State<WebViewPage> {
     }
   }
 
-  // NOUVELLE méthode d'envoi de notification de bienvenue
+  // Méthode d'envoi de notification de bienvenue
   Future<void> sendWelcomeNotification() async {
     if (!notificationsInitialized || userProfile.id == null) {
       print('⚠️ Notifications non autorisées ou pas d\'utilisateur');
@@ -850,35 +830,43 @@ class _WebViewPageState extends State<WebViewPage> {
     try {
       print('📱 Envoi notification système de bienvenue...');
 
-      // Envoyer la notification système
+      // Envoyer la notification système de bienvenue
       await NotificationService.showWelcomeNotification(
         userProfile.firstName,
         userProfile.id!,
       );
 
+      // Récupérer les évaluations après la notification de bienvenue
+      await Future.delayed(const Duration(seconds: 2));
+      await fetchUserEvaluations();
+
+      // NOUVEAU : Programmer et envoyer les notifications d'évaluations
+      await Future.delayed(const Duration(seconds: 1));
+      await scheduleEvaluationNotifications();
+
       // Afficher aussi un SnackBar dans l'app
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('📱 Notification envoyée à ${userProfile.firstName} !'),
+            content: Text('📱 Bienvenue ${userProfile.firstName} ! Notifications programmées ✅'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 3),
             action: SnackBarAction(
-              label: 'Test',
-              onPressed: () => testNotifications(),
+              label: 'Voir évaluations',
+              onPressed: () => _showEvaluationsBottomSheet(),
             ),
           ),
         );
       }
 
-      print('✅ Notification système envoyée avec succès');
+      print('✅ Notification système envoyée et évaluations notifiées');
 
     } catch (e) {
       print('❌ Erreur envoi notification: $e');
     }
   }
 
-  // NOUVELLE méthode de test des notifications
+  // Méthode de test des notifications
   Future<void> testNotifications() async {
     if (!notificationsInitialized) {
       print('❌ Notifications non autorisées');
@@ -887,10 +875,7 @@ class _WebViewPageState extends State<WebViewPage> {
     }
 
     try {
-      // Test notification simple
       await NotificationService.showTestNotification(userProfile.firstName);
-
-      print('✅ Notification de test envoyée');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -901,7 +886,6 @@ class _WebViewPageState extends State<WebViewPage> {
           ),
         );
       }
-
     } catch (e) {
       print('❌ Erreur test notifications: $e');
     }
@@ -915,6 +899,133 @@ class _WebViewPageState extends State<WebViewPage> {
     });
 
     await extractSessionAndProfile();
+  }
+
+  // MODIFIÉE : Méthode pour programmer les notifications automatiques
+  Future<void> scheduleEvaluationNotifications() async {
+    if (!notificationsInitialized || userProfile.id == null) {
+      print('⚠️ Conditions non réunies pour programmer les notifications');
+      return;
+    }
+
+    try {
+      print('⏰ Programmation des notifications d\'évaluations...');
+
+      // Utiliser EvaluationScheduler pour programmer les rappels
+      await EvaluationScheduler.performDailyEvaluationCheck(
+        controller,
+        userProfile.id,
+      );
+
+      // NOUVEAU : Programmer les rappels automatiques toutes les 5 minutes
+      await BackgroundNotificationService.scheduleFromEvaluations(
+        userProfile.firstName,
+        userProfile.id!,
+        upcomingEvaluations,
+      );
+
+      // Envoyer immédiatement les notifications pour les évaluations urgentes
+      await notifyUrgentEvaluations();
+
+      print('✅ Notifications programmées avec succès (incluant rappels automatiques)');
+
+    } catch (e) {
+      print('❌ Erreur programmation notifications: $e');
+    }
+  }
+
+  // NOUVELLE méthode : Afficher le statut des rappels
+  Future<void> _showReminderStatus() async {
+    try {
+      final status = await BackgroundNotificationService.getReminderStatus();
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('📱 Statut des rappels automatiques'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Total notifications: ${status['total_pending']}'),
+                Text('Rappels 5min: ${status['periodic_reminders']}'),
+                Text('Reprogrammation: ${status['has_reprogramming'] ? "✅" : "❌"}'),
+                if (status['next_reminder'] != null)
+                  Text('Prochain: ${status['next_reminder']}'),
+                if (status['error'] != null)
+                  Text('Erreur: ${status['error']}', style: const TextStyle(color: Colors.red)),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await BackgroundNotificationService.cancelPeriodicReminders();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('🚫 Rappels automatiques annulés'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                },
+                child: const Text('🚫 Arrêter rappels'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  if (userProfile.id != null && upcomingEvaluations.isNotEmpty) {
+                    await BackgroundNotificationService.scheduleFromEvaluations(
+                      userProfile.firstName,
+                      userProfile.id!,
+                      upcomingEvaluations,
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('🔄 Rappels automatiques reprogrammés'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                },
+                child: const Text('🔄 Reprogrammer'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Erreur affichage statut: $e');
+    }
+  }
+
+  // MODIFIÉE : Gestionnaire du cycle de vie de l'app
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        print('📱 App reprise - vérification des rappels');
+        _checkBackgroundReminders();
+        break;
+      case AppLifecycleState.paused:
+        print('📱 App en pause - rappels automatiques continuent');
+        break;
+      case AppLifecycleState.detached:
+        print('📱 App fermée - rappels automatiques actifs');
+        break;
+      case AppLifecycleState.inactive:
+        print('📱 App inactive');
+        break;
+      case AppLifecycleState.hidden:
+        print('📱 App cachée');
+        break;
+    }
   }
 
   @override
@@ -946,7 +1057,101 @@ class _WebViewPageState extends State<WebViewPage> {
             onPressed: isCheckingAuth ? null : forceProfileCheck,
             tooltip: 'Vérifier profil',
           ),
-          // NOUVEAU bouton notifications amélioré
+
+          // Bouton évaluations
+          if (userProfile.id != null)
+            IconButton(
+              icon: Stack(
+                children: [
+                  Icon(
+                    Icons.assignment,
+                    color: showEvaluations ? Colors.green : Colors.blue,
+                  ),
+                  if (upcomingEvaluations.isNotEmpty)
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          upcomingEvaluations.length.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              onPressed: () {
+                if (showEvaluations) {
+                  _showEvaluationsBottomSheet();
+                } else {
+                  fetchUserEvaluations();
+                }
+              },
+              tooltip: showEvaluations ? 'Voir évaluations' : 'Charger évaluations',
+            ),
+
+          // Bouton pour notifier les évaluations urgentes
+          if (userProfile.id != null && upcomingEvaluations.isNotEmpty)
+            IconButton(
+              icon: Stack(
+                children: [
+                  const Icon(Icons.notification_important, color: Colors.red),
+                  if (upcomingEvaluations.any((e) => e.isToday || e.isTomorrow))
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 12,
+                          minHeight: 12,
+                        ),
+                        child: const Text(
+                          '!',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              onPressed: () async {
+                await notifyUrgentEvaluations();
+              },
+              tooltip: 'Notifier évaluations urgentes',
+            ),
+
+          // NOUVEAU bouton pour gérer les rappels automatiques
+          if (userProfile.id != null)
+            IconButton(
+              icon: const Icon(Icons.autorenew, color: Colors.teal),
+              onPressed: () => _showReminderStatus(),
+              tooltip: 'Rappels automatiques',
+            ),
+
+          // Bouton notifications générales
           IconButton(
             icon: Icon(
               Icons.notifications,
@@ -963,7 +1168,8 @@ class _WebViewPageState extends State<WebViewPage> {
                 ? 'Test notifications'
                 : 'Activer notifications',
           ),
-          // NOUVEAU bouton pour test complet
+
+          // Bouton test complet
           if (userProfile.id != null)
             IconButton(
               icon: const Icon(Icons.science, color: Colors.purple),
@@ -986,6 +1192,8 @@ class _WebViewPageState extends State<WebViewPage> {
               },
               tooltip: 'Test complet notifications',
             ),
+
+          // Bouton profil utilisateur
           if (userProfile.id != null)
             IconButton(
               icon: const Icon(Icons.person, color: Colors.green),
@@ -1010,9 +1218,32 @@ class _WebViewPageState extends State<WebViewPage> {
                         Text('Session: ${sessionToken != null ? "✅ Active" : "❌ Inactive"}'),
                         Text('Authentifié: ${userProfile.isAuthenticated ? "✅ Oui" : "❌ Non"}'),
                         Text('Notifications: ${notificationsInitialized ? "✅ Actives" : "❌ Inactives"}'),
+                        Text('Évaluations: ${upcomingEvaluations.length} à venir'),
+                        if (upcomingEvaluations.isNotEmpty) ...[
+                          const SizedBox(height: 5),
+                          Text(
+                            'Urgentes: ${upcomingEvaluations.where((e) => e.isToday || e.isTomorrow).length}',
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     actions: [
+                      if (upcomingEvaluations.isNotEmpty)
+                        TextButton(
+                          onPressed: () async {
+                            Navigator.pop(context);
+                            await notifyUrgentEvaluations();
+                          },
+                          child: const Text('🚨 Notifier urgentes'),
+                        ),
+                      TextButton(
+                        onPressed: () => fetchUserEvaluations(),
+                        child: const Text('📚 Recharger évaluations'),
+                      ),
                       TextButton(
                         onPressed: () => sendWelcomeNotification(),
                         child: const Text('📱 Test Notification'),
@@ -1033,6 +1264,7 @@ class _WebViewPageState extends State<WebViewPage> {
             ),
         ],
       ),
+
       body: Stack(
         children: [
           WebViewWidget(controller: controller),
@@ -1094,6 +1326,38 @@ class _WebViewPageState extends State<WebViewPage> {
               ),
             ),
 
+          // Floating Action Button pour les évaluations
+          if (showEvaluations && upcomingEvaluations.isNotEmpty)
+            Positioned(
+              bottom: 100,
+              right: 20,
+              child: FloatingActionButton.extended(
+                onPressed: _showEvaluationsBottomSheet,
+                backgroundColor: Colors.orange,
+                icon: const Icon(Icons.assignment, color: Colors.white),
+                label: Text(
+                  '${upcomingEvaluations.length} éval.',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ),
+            ),
+
+          // Floating Action Button pour notifications urgentes
+          if (showEvaluations && upcomingEvaluations.any((e) => e.isToday || e.isTomorrow))
+            Positioned(
+              bottom: 160,
+              right: 20,
+              child: FloatingActionButton(
+                onPressed: () async {
+                  await notifyUrgentEvaluations();
+                },
+                backgroundColor: Colors.red,
+                child: const Icon(Icons.notification_important, color: Colors.white),
+                tooltip: 'Notifier évaluations urgentes',
+              ),
+            ),
+
+          // Widget profil en bas
           if (!userProfile.loading)
             Positioned(
               bottom: 20,
@@ -1126,6 +1390,24 @@ class _WebViewPageState extends State<WebViewPage> {
                           fontSize: 12,
                         ),
                       ),
+                      if (upcomingEvaluations.isNotEmpty) ...[
+                        Text(
+                          '📚 ${upcomingEvaluations.length} évaluations à venir',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10,
+                          ),
+                        ),
+                        if (upcomingEvaluations.any((e) => e.isToday || e.isTomorrow))
+                          Text(
+                            '🚨 ${upcomingEvaluations.where((e) => e.isToday || e.isTomorrow).length} urgentes !',
+                            style: const TextStyle(
+                              color: Colors.yellow,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                      ],
                     ] else ...[
                       Text(
                         '👤 ${userProfile.firstName}',
@@ -1152,5 +1434,348 @@ class _WebViewPageState extends State<WebViewPage> {
         ],
       ),
     );
+  }
+
+  // MODIFIÉE : Récupération des évaluations avec programmation automatique
+  Future<void> fetchUserEvaluations() async {
+    if (userProfile.id == null) {
+      print('⚠️ Pas d\'utilisateur connecté pour récupérer les évaluations');
+      return;
+    }
+
+    setState(() {
+      isLoadingEvaluations = true;
+      evaluationError = null;
+    });
+
+    try {
+      print('📚 === DEBUG API ÉVALUATIONS ===');
+      print('👤 Utilisateur: ${userProfile.firstName} (ID: ${userProfile.id})');
+
+      await controller.runJavaScript('''
+      fetch('/api/upcoming-evaluations?days_ahead=14&include_today=true&per_page=50', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'same-origin'
+      })
+      .then(function(response) {
+        return response.text();
+      })
+      .then(function(rawText) {
+        try {
+          const jsonData = JSON.parse(rawText);
+          window.debugApiData = jsonData;
+          window.debugApiStatus = 'success';
+        } catch (parseError) {
+          window.debugApiData = null;
+          window.debugApiStatus = 'parse_error';
+          window.debugApiError = parseError.message;
+        }
+      })
+      .catch(function(error) {
+        window.debugApiData = null;
+        window.debugApiStatus = 'fetch_error';
+        window.debugApiError = error.message;
+      });
+    ''');
+
+      await Future.delayed(const Duration(seconds: 3));
+
+      final debugInfo = await controller.runJavaScriptReturningResult('''
+      JSON.stringify({
+        status: window.debugApiStatus || 'unknown',
+        hasData: window.debugApiData !== null && window.debugApiData !== undefined,
+        error: window.debugApiError || null,
+        dataType: window.debugApiData ? typeof window.debugApiData : null,
+        dataStatus: window.debugApiData ? window.debugApiData.status : null,
+        dataCount: window.debugApiData && window.debugApiData.data ? window.debugApiData.data.length : null
+      })
+    ''');
+
+      if (debugInfo != null) {
+        try {
+          String cleanDebugInfo = debugInfo.toString();
+          if (cleanDebugInfo.startsWith('"') && cleanDebugInfo.endsWith('"')) {
+            cleanDebugInfo = cleanDebugInfo.substring(1, cleanDebugInfo.length - 1);
+          }
+          cleanDebugInfo = cleanDebugInfo.replaceAll('\\"', '"');
+
+          final debug = json.decode(cleanDebugInfo);
+
+          if (debug['status'] == 'success' && debug['hasData'] == true) {
+            final fullData = await controller.runJavaScriptReturningResult('''
+            window.debugApiData ? JSON.stringify(window.debugApiData) : null
+          ''');
+
+            if (fullData != null) {
+              String cleanData = fullData.toString();
+              if (cleanData.startsWith('"') && cleanData.endsWith('"')) {
+                cleanData = cleanData.substring(1, cleanData.length - 1);
+              }
+              cleanData = cleanData.replaceAll('\\"', '"');
+              cleanData = cleanData.replaceAll('\\\\', '\\');
+
+              final apiData = json.decode(cleanData);
+
+              try {
+                final evaluations = EvaluationService.parseEvaluations(apiData);
+                final summary = EvaluationService.parseSummary(apiData);
+
+                setState(() {
+                  upcomingEvaluations = evaluations;
+                  evaluationSummary = summary;
+                  isLoadingEvaluations = false;
+                  showEvaluations = true;
+                  evaluationError = null;
+                });
+
+                // NOUVEAU : Programmer automatiquement les rappels après récupération
+                if (evaluations.isNotEmpty && userProfile.id != null && notificationsInitialized) {
+                  await BackgroundNotificationService.scheduleFromEvaluations(
+                    userProfile.firstName,
+                    userProfile.id!,
+                    evaluations,
+                  );
+                  print('🔄 Rappels automatiques mis à jour avec ${evaluations.length} évaluations');
+                }
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('✅ ${evaluations.length} évaluations trouvées !'),
+                      backgroundColor: Colors.green,
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
+                }
+
+              } catch (parseError) {
+                print('❌ Erreur parsing avec EvaluationService: $parseError');
+                throw parseError;
+              }
+            } else {
+              throw Exception('Impossible de récupérer les données complètes');
+            }
+          } else {
+            String errorMsg = debug['error']?.toString() ?? 'Erreur de récupération des données';
+            throw Exception(errorMsg);
+          }
+        } catch (e) {
+          print('❌ Erreur traitement debug: $e');
+          throw e;
+        }
+      } else {
+        throw Exception('Aucune information de debug disponible');
+      }
+
+    } catch (e) {
+      print('❌ Erreur générale: $e');
+      setState(() {
+        evaluationError = 'Erreur: ${e.toString()}';
+        isLoadingEvaluations = false;
+        upcomingEvaluations = [];
+        evaluationSummary = null;
+        showEvaluations = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
+  // Fonction pour notifier les évaluations urgentes
+  Future<void> notifyUrgentEvaluations() async {
+    if (!notificationsInitialized || upcomingEvaluations.isEmpty) {
+      print('⚠️ Notifications non autorisées ou aucune évaluation');
+      return;
+    }
+
+    try {
+      final urgentEvaluations = upcomingEvaluations.where((eval) =>
+      eval.isToday || eval.isTomorrow || eval.daysUntil <= 2
+      ).toList();
+
+      if (urgentEvaluations.isEmpty) {
+        print('📱 Aucune évaluation urgente à notifier');
+        return;
+      }
+
+      print('🚨 ${urgentEvaluations.length} évaluations urgentes trouvées');
+
+      for (final eval in urgentEvaluations) {
+        String title = '';
+        bool isImportant = false;
+
+        if (eval.isToday) {
+          title = '⚠️ Évaluation AUJOURD\'HUI !';
+          isImportant = true;
+        } else if (eval.isTomorrow) {
+          title = '📅 Évaluation DEMAIN';
+          isImportant = true;
+        } else {
+          title = '📚 Évaluation dans ${eval.daysUntil} jours';
+          isImportant = false;
+        }
+
+        String body = '';
+        if (eval.topicCategory?.name != null) {
+          body += '${eval.topicCategory!.name}: ';
+        }
+        body += eval.description ?? 'Évaluation';
+        body += '\n📅 ${eval.evaluationDateFormatted}';
+
+        await NotificationService.showNotification(
+          id: 100 + eval.id,
+          title: title,
+          body: body,
+          payload: 'evaluation_${eval.id}',
+          isImportant: isImportant,
+        );
+
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+
+      if (urgentEvaluations.length > 1) {
+        final todayCount = urgentEvaluations.where((e) => e.isToday).length;
+        final tomorrowCount = urgentEvaluations.where((e) => e.isTomorrow).length;
+        final soonCount = urgentEvaluations.where((e) => !e.isToday && !e.isTomorrow).length;
+
+        String summaryBody = '';
+        if (todayCount > 0) {
+          summaryBody += '$todayCount aujourd\'hui';
+        }
+        if (tomorrowCount > 0) {
+          if (summaryBody.isNotEmpty) summaryBody += ', ';
+          summaryBody += '$tomorrowCount demain';
+        }
+        if (soonCount > 0) {
+          if (summaryBody.isNotEmpty) summaryBody += ', ';
+          summaryBody += '$soonCount bientôt';
+        }
+
+        await NotificationService.showNotification(
+          id: 200,
+          title: '📚 Résumé: ${urgentEvaluations.length} évaluations urgentes',
+          body: summaryBody,
+          payload: 'evaluations_summary',
+          isImportant: todayCount > 0,
+        );
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('📱 ${urgentEvaluations.length} notifications envoyées pour les évaluations urgentes'),
+            backgroundColor: urgentEvaluations.any((e) => e.isToday) ? Colors.red : Colors.orange,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Voir',
+              onPressed: () => _showEvaluationsBottomSheet(),
+            ),
+          ),
+        );
+      }
+
+    } catch (e) {
+      print('❌ Erreur envoi notifications évaluations: $e');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur notifications: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  // Afficher les évaluations dans un bottom sheet
+  void _showEvaluationsBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              height: 4,
+              width: 40,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.school, color: Colors.blue),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Mes évaluations',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => fetchUserEvaluations(),
+                    icon: Icon(
+                      Icons.refresh,
+                      color: isLoadingEvaluations ? Colors.orange : Colors.blue,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ),
+
+            const Divider(height: 1),
+
+            Expanded(
+              child: EvaluationsList(
+                evaluations: upcomingEvaluations,
+                summary: evaluationSummary,
+                isLoading: isLoadingEvaluations,
+                errorMessage: evaluationError,
+                onRefresh: fetchUserEvaluations,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 }
