@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'dart:io'; // AJOUTÉ pour Platform.isIOS
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
@@ -13,16 +14,17 @@ class NotificationService {
     const AndroidInitializationSettings initializationSettingsAndroid =
     AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    // Configuration iOS
+    // Configuration iOS améliorée
     const DarwinInitializationSettings initializationSettingsIOS =
     DarwinInitializationSettings(
       requestSoundPermission: true,
       requestBadgePermission: true,
       requestAlertPermission: true,
-      requestCriticalPermission: true,
+      requestCriticalPermission: false, // MODIFIÉ : Critical peut causer des problèmes
       defaultPresentAlert: true,
       defaultPresentSound: true,
       defaultPresentBadge: true,
+      onDidReceiveLocalNotification: onDidReceiveLocalNotification, // AJOUTÉ pour iOS ancien
     );
 
     const InitializationSettings initializationSettings = InitializationSettings(
@@ -48,30 +50,43 @@ class NotificationService {
     print('✅ Notifications système initialisées');
   }
 
-  // Demander les permissions pour les notifications
+  // NOUVEAU : Callback pour iOS versions anciennes
+  static void onDidReceiveLocalNotification(
+      int id,
+      String? title,
+      String? body,
+      String? payload,
+      ) async {
+    print('📱 [iOS] Notification reçue: $title');
+  }
+
+  // MODIFIÉE : Demander les permissions avec gestion iOS/Android séparée
   static Future<void> _requestPermissions() async {
     print('🔐 Demande des permissions notifications...');
 
     try {
-      // Permission Android
-      if (await Permission.notification.isDenied) {
-        final result = await Permission.notification.request();
-        print('📱 Permission Android: $result');
-      }
+      if (Platform.isAndroid) {
+        // Permission Android
+        if (await Permission.notification.isDenied) {
+          final result = await Permission.notification.request();
+          print('📱 Permission Android: $result');
+        }
+      } else if (Platform.isIOS) {
+        // Permissions iOS spécifiques
+        print('🍎 [iOS] Demande permissions spécifiques...');
+        final IOSFlutterLocalNotificationsPlugin? iosImplementation =
+        _notifications.resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin>();
 
-      // Permissions iOS spécifiques
-      final IOSFlutterLocalNotificationsPlugin? iosImplementation =
-      _notifications.resolvePlatformSpecificImplementation<
-          IOSFlutterLocalNotificationsPlugin>();
-
-      if (iosImplementation != null) {
-        final bool? granted = await iosImplementation.requestPermissions(
-          alert: true,
-          badge: true,
-          sound: true,
-          critical: true,
-        );
-        print('📱 Permissions iOS accordées: $granted');
+        if (iosImplementation != null) {
+          final bool? granted = await iosImplementation.requestPermissions(
+            alert: true,
+            badge: true,
+            sound: true,
+            critical: false, // MODIFIÉ : Éviter critical sur iOS
+          );
+          print('📱 Permissions iOS accordées: $granted');
+        }
       }
 
       // Vérifier le statut final
@@ -82,8 +97,69 @@ class NotificationService {
     }
   }
 
+  // NOUVELLE MÉTHODE : Demander explicitement les permissions iOS
+  static Future<bool> requestPermissions() async {
+    if (!Platform.isIOS) {
+      return await areNotificationsEnabled();
+    }
+
+    try {
+      print('📱 [iOS] Demande explicite de permissions...');
+
+      final IOSFlutterLocalNotificationsPlugin? iosImplementation =
+      _notifications.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+
+      if (iosImplementation != null) {
+        final bool? result = await iosImplementation.requestPermissions(
+          alert: true,
+          badge: true,
+          sound: true,
+          critical: false,
+        );
+
+        print('📱 [iOS] Résultat permissions: $result');
+        return result ?? false;
+      }
+
+      return false;
+    } catch (e) {
+      print('❌ [iOS] Erreur demande permissions: $e');
+      return false;
+    }
+  }
+
+  // MODIFIÉE : Vérifier les permissions avec plus de détails sur iOS
+  static Future<bool> areNotificationsEnabled() async {
+    try {
+      if (Platform.isIOS) {
+        final IOSFlutterLocalNotificationsPlugin? iosImplementation =
+        _notifications.resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin>();
+
+        if (iosImplementation != null) {
+          final NotificationsEnabledOptions? result = await iosImplementation.checkPermissions();
+          print('📱 [iOS] Permissions vérifiées: $result');
+          // Vérifier si au moins les alertes sont autorisées
+          return result?.isEnabled ?? false;
+        }
+        return false;
+      } else {
+        // Android - logique existante
+        final status = await Permission.notification.status;
+        print('📋 [Android] Statut notifications: $status');
+        return status == PermissionStatus.granted;
+      }
+    } catch (e) {
+      print('❌ Erreur vérification permissions: $e');
+      return false;
+    }
+  }
+
   // Créer un canal de notification pour Android
   static Future<void> _createNotificationChannel() async {
+    if (!Platform.isAndroid) return;
+
     try {
       const AndroidNotificationChannel channel = AndroidNotificationChannel(
         'ouibuddy_high_importance',
@@ -108,14 +184,31 @@ class NotificationService {
     }
   }
 
-  // Afficher notification de bienvenue
+  // MODIFIÉE : Afficher notification de bienvenue avec gestion iOS
   static Future<void> showWelcomeNotification(String firstName, int userId) async {
-    print('📱 Envoi notification système de bienvenue...');
+    print('📱 [${Platform.isIOS ? "iOS" : "Android"}] Envoi notification système de bienvenue...');
 
     try {
-      // CORRECTION : Créer les détails de notification dynamiquement
+      // Vérifier les permissions d'abord
+      final enabled = await areNotificationsEnabled();
+      if (!enabled) {
+        print('❌ Notifications non autorisées - tentative d\'activation...');
+
+        if (Platform.isIOS) {
+          final granted = await requestPermissions();
+          if (!granted) {
+            print('❌ [iOS] Permissions refusées');
+            return;
+          }
+        } else {
+          print('❌ [Android] Permissions manquantes');
+          return;
+        }
+      }
+
+      // Créer les détails de notification adaptés à la plateforme
       final NotificationDetails notificationDetails = NotificationDetails(
-        android: AndroidNotificationDetails(
+        android: Platform.isAndroid ? AndroidNotificationDetails(
           'ouibuddy_high_importance',
           'OuiBuddy Notifications',
           channelDescription: 'Notifications importantes de l\'application OuiBuddy',
@@ -127,12 +220,12 @@ class NotificationService {
           playSound: true,
           showWhen: true,
           styleInformation: BigTextStyleInformation(
-            'Bienvenue sur OuiBuddy ! Vous êtes maintenant connecté avec succès.',
+            'Bienvenue sur OuiBuddy ! Vous êtes maintenant connecté avec succès et sur votre dashboard.',
             summaryText: 'OuiBuddy',
-            contentTitle: '👋 Salut $firstName !', // CORRECTION : Maintenant dynamique
+            contentTitle: '👋 Salut $firstName !',
           ),
-        ),
-        iOS: DarwinNotificationDetails(
+        ) : null,
+        iOS: Platform.isIOS ? DarwinNotificationDetails(
           presentAlert: true,
           presentBadge: true,
           presentSound: true,
@@ -141,24 +234,24 @@ class NotificationService {
           subtitle: 'Connexion réussie',
           threadIdentifier: 'ouibuddy_welcome',
           interruptionLevel: InterruptionLevel.active,
-        ),
+        ) : null,
       );
 
       await _notifications.show(
         userId,
         '👋 Salut $firstName !',
-        'Connexion réussie sur OuiBuddy',
+        'Connexion réussie ! Vous êtes sur votre dashboard OuiBuddy.',
         notificationDetails,
         payload: 'welcome_$userId',
       );
 
-      print('✅ Notification système de bienvenue envoyée avec succès');
+      print('✅ [${Platform.isIOS ? "iOS" : "Android"}] Notification système de bienvenue envoyée avec succès');
     } catch (e) {
-      print('❌ Erreur envoi notification de bienvenue: $e');
+      print('❌ [${Platform.isIOS ? "iOS" : "Android"}] Erreur envoi notification de bienvenue: $e');
     }
   }
 
-  // Afficher notification personnalisée
+  // MODIFIÉE : Afficher notification personnalisée avec gestion iOS
   static Future<void> showNotification({
     required int id,
     required String title,
@@ -166,11 +259,11 @@ class NotificationService {
     String? payload,
     bool isImportant = false,
   }) async {
-    print('📱 Envoi notification système personnalisée...');
+    print('📱 [${Platform.isIOS ? "iOS" : "Android"}] Envoi notification système personnalisée...');
 
     try {
       final NotificationDetails notificationDetails = NotificationDetails(
-        android: AndroidNotificationDetails(
+        android: Platform.isAndroid ? AndroidNotificationDetails(
           'ouibuddy_high_importance',
           'OuiBuddy Notifications',
           channelDescription: 'Notifications importantes de l\'application OuiBuddy',
@@ -186,8 +279,8 @@ class NotificationService {
             summaryText: 'OuiBuddy',
             contentTitle: title,
           ),
-        ),
-        iOS: DarwinNotificationDetails(
+        ) : null,
+        iOS: Platform.isIOS ? DarwinNotificationDetails(
           presentAlert: true,
           presentBadge: true,
           presentSound: true,
@@ -195,9 +288,9 @@ class NotificationService {
           subtitle: 'OuiBuddy',
           threadIdentifier: 'ouibuddy_general',
           interruptionLevel: isImportant
-              ? InterruptionLevel.critical
+              ? InterruptionLevel.timeSensitive  // MODIFIÉ : timeSensitive au lieu de critical
               : InterruptionLevel.active,
-        ),
+        ) : null,
       );
 
       await _notifications.show(
@@ -208,28 +301,28 @@ class NotificationService {
         payload: payload,
       );
 
-      print('✅ Notification système personnalisée envoyée');
+      print('✅ [${Platform.isIOS ? "iOS" : "Android"}] Notification système personnalisée envoyée');
     } catch (e) {
-      print('❌ Erreur envoi notification personnalisée: $e');
+      print('❌ [${Platform.isIOS ? "iOS" : "Android"}] Erreur envoi notification personnalisée: $e');
     }
   }
 
-  // Notification de test simple
+  // MODIFIÉE : Notification de test simple avec gestion iOS
   static Future<void> showTestNotification(String firstName) async {
-    print('🧪 Envoi notification de test...');
+    print('🧪 [${Platform.isIOS ? "iOS" : "Android"}] Envoi notification de test...');
 
     try {
       await showNotification(
         id: 999,
-        title: '🧪 Test OuiBuddy',
-        body: 'Notification de test pour $firstName - Tout fonctionne !',
+        title: '🧪 Test OuiBuddy ${Platform.isIOS ? "🍎" : "🤖"}',
+        body: 'Notification de test pour $firstName - Tout fonctionne sur ${Platform.isIOS ? "iOS" : "Android"} !',
         payload: 'test_notification',
         isImportant: false,
       );
 
-      print('✅ Notification de test envoyée');
+      print('✅ [${Platform.isIOS ? "iOS" : "Android"}] Notification de test envoyée');
     } catch (e) {
-      print('❌ Erreur notification de test: $e');
+      print('❌ [${Platform.isIOS ? "iOS" : "Android"}] Erreur notification de test: $e');
     }
   }
 
@@ -240,7 +333,7 @@ class NotificationService {
     required String body,
     String? payload,
   }) async {
-    print('🚨 Envoi notification importante...');
+    print('🚨 [${Platform.isIOS ? "iOS" : "Android"}] Envoi notification importante...');
 
     try {
       await showNotification(
@@ -251,15 +344,45 @@ class NotificationService {
         isImportant: true,
       );
 
-      print('✅ Notification importante envoyée');
+      print('✅ [${Platform.isIOS ? "iOS" : "Android"}] Notification importante envoyée');
     } catch (e) {
-      print('❌ Erreur notification importante: $e');
+      print('❌ [${Platform.isIOS ? "iOS" : "Android"}] Erreur notification importante: $e');
+    }
+  }
+
+  // MODIFIÉE : Test spécifique iOS
+  static Future<void> testIOSNotifications(String userName) async {
+    if (!Platform.isIOS) return;
+
+    try {
+      print('📱 [iOS] Test spécifique des notifications...');
+
+      // Demander les permissions d'abord
+      final bool granted = await requestPermissions();
+
+      if (!granted) {
+        print('❌ [iOS] Permissions non accordées');
+        return;
+      }
+
+      // Envoyer une notification de test
+      await showNotification(
+        id: 998,
+        title: '🧪 [iOS] Test Notification',
+        body: 'Bonjour $userName ! Les notifications fonctionnent sur iOS 📱',
+        payload: 'ios_test',
+      );
+
+      print('✅ [iOS] Notification de test envoyée');
+
+    } catch (e) {
+      print('❌ [iOS] Erreur test notifications: $e');
     }
   }
 
   // Gérer le clic sur notification
   static void _handleNotificationClick(NotificationResponse details) {
-    print('🔔 Notification cliquée: ${details.payload}');
+    print('🔔 [${Platform.isIOS ? "iOS" : "Android"}] Notification cliquée: ${details.payload}');
 
     try {
       if (details.payload?.startsWith('welcome_') == true) {
@@ -267,6 +390,8 @@ class NotificationService {
         // Ici vous pouvez naviguer vers une page spécifique
       } else if (details.payload == 'test_notification') {
         print('🧪 Notification de test cliquée');
+      } else if (details.payload == 'ios_test') {
+        print('🍎 Notification de test iOS cliquée');
       } else if (details.payload?.startsWith('scheduled_') == true) {
         print('⏰ Notification programmée cliquée');
       }
@@ -275,25 +400,22 @@ class NotificationService {
     }
   }
 
-  // Vérifier si les notifications sont autorisées
-  static Future<bool> areNotificationsEnabled() async {
-    try {
-      final status = await Permission.notification.status;
-      print('📋 Statut notifications: $status');
-      return status == PermissionStatus.granted;
-    } catch (e) {
-      print('❌ Erreur vérification permissions: $e');
-      return false;
-    }
-  }
-
-  // Ouvrir les paramètres de l'app pour activer les notifications
+  // MODIFIÉE : Ouvrir les paramètres avec gestion iOS
   static Future<void> openNotificationSettings() async {
     try {
-      print('🔧 Ouverture des paramètres de l\'app...');
-      await openAppSettings();
+      print('🔧 [${Platform.isIOS ? "iOS" : "Android"}] Ouverture des paramètres de l\'app...');
+
+      if (Platform.isIOS) {
+        // Sur iOS, on ne peut pas ouvrir directement les paramètres de notifications
+        // Mais on peut essayer d'ouvrir les paramètres de l'app
+        await openAppSettings();
+        print('🍎 [iOS] Paramètres de l\'app ouverts (l\'utilisateur doit naviguer vers Notifications)');
+      } else {
+        await openAppSettings();
+        print('🤖 [Android] Paramètres ouverts');
+      }
     } catch (e) {
-      print('❌ Erreur ouverture paramètres: $e');
+      print('❌ [${Platform.isIOS ? "iOS" : "Android"}] Erreur ouverture paramètres: $e');
     }
   }
 
@@ -301,9 +423,9 @@ class NotificationService {
   static Future<void> cancelNotification(int id) async {
     try {
       await _notifications.cancel(id);
-      print('✅ Notification $id annulée');
+      print('✅ [${Platform.isIOS ? "iOS" : "Android"}] Notification $id annulée');
     } catch (e) {
-      print('❌ Erreur annulation notification $id: $e');
+      print('❌ [${Platform.isIOS ? "iOS" : "Android"}] Erreur annulation notification $id: $e');
     }
   }
 
@@ -311,9 +433,9 @@ class NotificationService {
   static Future<void> cancelAllNotifications() async {
     try {
       await _notifications.cancelAll();
-      print('✅ Toutes les notifications annulées');
+      print('✅ [${Platform.isIOS ? "iOS" : "Android"}] Toutes les notifications annulées');
     } catch (e) {
-      print('❌ Erreur annulation toutes notifications: $e');
+      print('❌ [${Platform.isIOS ? "iOS" : "Android"}] Erreur annulation toutes notifications: $e');
     }
   }
 
@@ -321,22 +443,28 @@ class NotificationService {
   static Future<List<PendingNotificationRequest>> getPendingNotifications() async {
     try {
       final pending = await _notifications.pendingNotificationRequests();
-      print('📋 ${pending.length} notifications en attente');
+      print('📋 [${Platform.isIOS ? "iOS" : "Android"}] ${pending.length} notifications en attente');
       return pending;
     } catch (e) {
-      print('❌ Erreur récupération notifications en attente: $e');
+      print('❌ [${Platform.isIOS ? "iOS" : "Android"}] Erreur récupération notifications en attente: $e');
       return [];
     }
   }
 
-  // Méthode utilitaire pour tester toutes les fonctionnalités
+  // MODIFIÉE : Méthode utilitaire pour tester toutes les fonctionnalités
   static Future<void> runFullTest(String firstName, int userId) async {
-    print('🧪 === DÉBUT TEST COMPLET NOTIFICATIONS ===');
+    print('🧪 === DÉBUT TEST COMPLET NOTIFICATIONS [${Platform.isIOS ? "iOS" : "Android"}] ===');
 
     try {
       // Test 1: Vérifier permissions
-      final enabled = await areNotificationsEnabled();
+      bool enabled = await areNotificationsEnabled();
       print('🔐 Permissions activées: $enabled');
+
+      if (!enabled && Platform.isIOS) {
+        print('🍎 [iOS] Tentative d\'activation des permissions...');
+        enabled = await requestPermissions();
+        print('🍎 [iOS] Permissions après demande: $enabled');
+      }
 
       if (!enabled) {
         print('❌ Permissions manquantes - Test arrêté');
@@ -351,21 +479,27 @@ class NotificationService {
       await showTestNotification(firstName);
       await Future.delayed(const Duration(seconds: 2));
 
-      // Test 4: Notification importante
+      // Test 4: Test spécifique iOS
+      if (Platform.isIOS) {
+        await testIOSNotifications(firstName);
+        await Future.delayed(const Duration(seconds: 2));
+      }
+
+      // Test 5: Notification importante
       await showImportantNotification(
         id: 995,
-        title: '🚨 Test Important',
-        body: 'Notification critique pour $firstName',
+        title: '🚨 Test Important ${Platform.isIOS ? "🍎" : "🤖"}',
+        body: 'Notification critique pour $firstName sur ${Platform.isIOS ? "iOS" : "Android"}',
         payload: 'test_important',
       );
 
-      // Test 5: Vérifier notifications en attente
+      // Test 6: Vérifier notifications en attente
       final pending = await getPendingNotifications();
       print('📋 ${pending.length} notifications en attente après tests');
 
-      print('✅ === TEST COMPLET TERMINÉ ===');
+      print('✅ === TEST COMPLET TERMINÉ [${Platform.isIOS ? "iOS" : "Android"}] ===');
     } catch (e) {
-      print('❌ Erreur pendant le test complet: $e');
+      print('❌ [${Platform.isIOS ? "iOS" : "Android"}] Erreur pendant le test complet: $e');
     }
   }
 }
