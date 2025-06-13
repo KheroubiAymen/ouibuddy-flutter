@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:http/http.dart' as http;
+// import 'package:url_launcher/url_launcher.dart'; // ← COMMENTEZ CETTE LIGNE
+
 import 'evaluation_service.dart';
 import 'evaluation_widgets.dart';
 import 'evaluation_scheduler.dart';
@@ -40,7 +40,8 @@ class MyApp extends StatelessWidget {
       routes: {
         '/home': (context) => const WebViewPage(), // ← AJOUTER CETTE LIGNE
       },
-      debugShowCheckedModeBanner: false, // ← OPTIONNEL : masquer le banner debug
+      debugShowCheckedModeBanner:
+          false, // ← OPTIONNEL : masquer le banner debug
     );
   }
 }
@@ -182,8 +183,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           title: const Text('🔔 Notifications'),
           content: const Text(
               'Pour recevoir les notifications de bienvenue et autres alertes importantes, '
-                  'veuillez autoriser les notifications dans les paramètres de votre appareil.'
-          ),
+              'veuillez autoriser les notifications dans les paramètres de votre appareil.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -212,18 +212,20 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               isLoading = true;
               hasError = false;
             });
-            print('🌐 [${Platform.isIOS ? "iOS" : "Android"}] Page starting: $url');
+            print(
+                '🌐 [${Platform.isIOS ? "iOS" : "Android"}] Page starting: $url');
           },
           onPageFinished: (url) {
             setState(() {
               isLoading = false;
             });
-            print('✅ [${Platform.isIOS ? "iOS" : "Android"}] Page finished: $url');
+            print(
+                '✅ [${Platform.isIOS ? "iOS" : "Android"}] Page finished: $url');
 
             // Délais adaptés selon la plateforme
-            final delay = Platform.isIOS ?
-            const Duration(seconds: 6) :
-            const Duration(seconds: 3);
+            final delay = Platform.isIOS
+                ? const Duration(seconds: 6)
+                : const Duration(seconds: 3);
 
             Future.delayed(delay, () {
               if (Platform.isIOS) {
@@ -236,18 +238,20 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
 
             // Dashboard check avec délai plus long pour iOS
             if (url.contains('/dashboard') || url.contains('/profile')) {
-              final dashboardDelay = Platform.isIOS ?
-              const Duration(seconds: 8) :
-              const Duration(seconds: 5);
+              final dashboardDelay = Platform.isIOS
+                  ? const Duration(seconds: 8)
+                  : const Duration(seconds: 5);
 
               Future.delayed(dashboardDelay, () {
-                print('🎯 [${Platform.isIOS ? "iOS" : "Android"}] Dashboard détecté, extraction supplémentaire...');
+                print(
+                    '🎯 [${Platform.isIOS ? "iOS" : "Android"}] Dashboard détecté, extraction supplémentaire...');
                 extractSessionAndProfile();
               });
             }
           },
           onWebResourceError: (error) {
-            print('❌ [${Platform.isIOS ? "iOS" : "Android"}] Web resource error: ${error.errorCode} - ${error.description}');
+            print(
+                '❌ [${Platform.isIOS ? "iOS" : "Android"}] Web resource error: ${error.errorCode} - ${error.description}');
 
             // Gestion d'erreur adaptée iOS
             if (Platform.isIOS) {
@@ -256,8 +260,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   error.errorCode == -999 || // NSURLErrorCancelled sur iOS
                   error.description.contains('cancelled') ||
                   error.description.contains('ERR_CACHE_MISS')) {
-
-                if (retryCount < 5) { // Plus de tentatives sur iOS
+                if (retryCount < 5) {
+                  // Plus de tentatives sur iOS
                   retryCount++;
                   print('🔄 [iOS] Retry attempt $retryCount');
                   Future.delayed(const Duration(seconds: 2), () {
@@ -272,7 +276,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               }
             } else {
               // Logique Android existante
-              if (error.errorCode == -1 || error.description.contains('ERR_CACHE_MISS')) {
+              if (error.errorCode == -1 ||
+                  error.description.contains('ERR_CACHE_MISS')) {
                 if (retryCount < 3) {
                   retryCount++;
                   print('🔄 [Android] Retry attempt $retryCount');
@@ -287,9 +292,11 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             }
           },
           onNavigationRequest: (request) {
-            print('🧭 [${Platform.isIOS ? "iOS" : "Android"}] Navigation vers: ${request.url}');
+            print(
+                '🧭 [${Platform.isIOS ? "iOS" : "Android"}] Navigation vers: ${request.url}');
             if (!request.url.startsWith('https://ouibuddy.com')) {
-              launchUrl(Uri.parse(request.url), mode: LaunchMode.externalApplication);
+              print(
+                  '🔗 [TEMPORAIRE] URL externe bloquée pour éviter crash: ${request.url}'); // ← AJOUTEZ CECI
               return NavigationDecision.prevent;
             }
             return NavigationDecision.navigate;
@@ -404,12 +411,14 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         await fetchUserProfileViaWebView();
 
         // Si profil récupéré avec succès, vérifier la navigation
-        if (userProfile.id != null && !userProfile.loading && userProfile.firstName != 'Utilisateur') {
-          print('🎯 Profil récupéré avec succès: ${userProfile.firstName} (ID: ${userProfile.id})');
+        if (userProfile.id != null &&
+            !userProfile.loading &&
+            userProfile.firstName != 'Utilisateur') {
+          print(
+              '🎯 Profil récupéré avec succès: ${userProfile.firstName} (ID: ${userProfile.id})');
 
           // NOUVEAU : Vérifier et naviguer vers le dashboard
           await checkAndNavigateToDashboard();
-
         } else {
           print('🔄 API pas de résultat, extraction depuis URL...');
           await extractProfileFromUrl();
@@ -418,7 +427,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         print('⚠️ Utilisateur non authentifié');
 
         // Même si pas authentifié officiellement, essayer l'extraction URL si on est sur dashboard
-        final url = await controller.runJavaScriptReturningResult('window.location.href');
+        final url = await controller
+            .runJavaScriptReturningResult('window.location.href');
         if (url != null && url.toString().contains('/dashboard')) {
           print('🎯 Sur dashboard sans auth détectée, extraction URL...');
           await extractProfileFromUrl();
@@ -431,8 +441,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       }
 
       // Log final du statut
-      print('📋 RÉSULTAT FINAL: ${userProfile.firstName} (ID: ${userProfile.id}, Auth: ${userProfile.isAuthenticated})');
-
+      print(
+          '📋 RÉSULTAT FINAL: ${userProfile.firstName} (ID: ${userProfile.id}, Auth: ${userProfile.isAuthenticated})');
     } catch (e) {
       print('❌ Erreur lors de l\'extraction: $e');
       // Dernière tentative avec l'URL
@@ -450,7 +460,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       print('🔍 Vérification navigation dashboard...');
 
       // Récupérer l'URL actuelle
-      final currentUrlResult = await controller.runJavaScriptReturningResult('window.location.href');
+      final currentUrlResult =
+          await controller.runJavaScriptReturningResult('window.location.href');
       final currentUrl = currentUrlResult?.toString().replaceAll('"', '') ?? '';
 
       print('🌐 URL actuelle: $currentUrl');
@@ -470,7 +481,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         await Future.delayed(const Duration(seconds: 3));
 
         // Vérifier si la navigation a réussi
-        final newUrlResult = await controller.runJavaScriptReturningResult('window.location.href');
+        final newUrlResult = await controller
+            .runJavaScriptReturningResult('window.location.href');
         final newUrl = newUrlResult?.toString().replaceAll('"', '') ?? '';
 
         if (newUrl.contains('/dashboard')) {
@@ -496,7 +508,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       } else {
         print('⚠️ Pas d\'utilisateur connecté pour naviguer');
       }
-
     } catch (e) {
       print('❌ Erreur vérification navigation: $e');
     }
@@ -527,11 +538,11 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       ''');
 
       print('✅ Script de navigation JavaScript exécuté');
-
     } catch (e) {
       print('❌ Erreur navigation JavaScript: $e');
     }
   }
+
   // Méthode pour extraire les informations de session Laravel
   Future<Map<String, dynamic>?> extractLaravelSession() async {
     try {
@@ -610,10 +621,10 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     try {
       print('🔍 Extraction simple des cookies...');
 
-      final cookies = await controller.runJavaScriptReturningResult('document.cookie');
+      final cookies =
+          await controller.runJavaScriptReturningResult('document.cookie');
       final csrfToken = await controller.runJavaScriptReturningResult(
-          'document.querySelector(\'meta[name="csrf-token"]\')?.getAttribute(\'content\') || null'
-      );
+          'document.querySelector(\'meta[name="csrf-token"]\')?.getAttribute(\'content\') || null');
 
       if (cookies != null) {
         final cookieString = cookies.toString().replaceAll('"', '');
@@ -713,8 +724,10 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   // Méthode de fallback pour vérifier l'authentification
   Future<bool> checkSimpleAuthentication() async {
     try {
-      final url = await controller.runJavaScriptReturningResult('window.location.href');
-      final pathname = await controller.runJavaScriptReturningResult('window.location.pathname');
+      final url =
+          await controller.runJavaScriptReturningResult('window.location.href');
+      final pathname = await controller
+          .runJavaScriptReturningResult('window.location.pathname');
 
       if (url != null && pathname != null) {
         final urlString = url.toString().replaceAll('"', '');
@@ -834,7 +847,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     } catch (e) {
       print('❌ Erreur récupération profil: $e');
       // NE PAS faire de fallback sur extractProfileFromUrl()
-      print('🚨 Erreur JavaScript détectée - Il faut corriger l\'API, pas utiliser l\'URL');
+      print(
+          '🚨 Erreur JavaScript détectée - Il faut corriger l\'API, pas utiliser l\'URL');
     }
   }
 
@@ -867,11 +881,11 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             userProfile = UserProfile.fromJson(profileData);
           });
 
-          print('✅ PROFIL API RÉCUPÉRÉ: ${userProfile.firstName} (ID: ${userProfile.id})');
+          print(
+              '✅ PROFIL API RÉCUPÉRÉ: ${userProfile.firstName} (ID: ${userProfile.id})');
 
           // NOUVEAU : Navigation automatique après récupération du profil
           await checkAndNavigateToDashboard();
-
         } else {
           print('❌ Format de données API inattendu: $apiData');
           await handleApiErrorFixed(apiData);
@@ -954,7 +968,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     ''');
 
       if (testResult != null) {
-        final test = json.decode(testResult.toString().replaceAll('"', '').replaceAll('\\"', '"'));
+        final test = json.decode(
+            testResult.toString().replaceAll('"', '').replaceAll('\\"', '"'));
         print('🧪 Résultat test API: $test');
 
         if (test['test'] == 'success') {
@@ -965,7 +980,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           print('❌ XMLHttpRequest ne fonctionne pas: ${test['error']}');
         }
       }
-
     } catch (e) {
       print('❌ Erreur test API: $e');
     }
@@ -1061,7 +1075,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               );
             });
 
-            print('✅ PROFIL CRÉÉ: ${userProfile.firstName} (ID: ${userProfile.id})');
+            print(
+                '✅ PROFIL CRÉÉ: ${userProfile.firstName} (ID: ${userProfile.id})');
 
             // NOUVEAU : Navigation automatique après extraction URL aussi
             await checkAndNavigateToDashboard();
@@ -1074,6 +1089,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       print('❌ Erreur extraction profil URL: $e');
     }
   }
+
   // Gérer la réponse API
   Future<void> handleApiResponse(String resultString) async {
     try {
@@ -1098,11 +1114,11 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             userProfile = UserProfile.fromJson(profileData);
           });
 
-          print('✅ PROFIL RÉCUPÉRÉ VIA API: ${userProfile.firstName} (ID: ${userProfile.id})');
+          print(
+              '✅ PROFIL RÉCUPÉRÉ VIA API: ${userProfile.firstName} (ID: ${userProfile.id})');
 
           // NOUVEAU : Navigation automatique après récupération du profil
           await checkAndNavigateToDashboard();
-
         } else {
           await handleApiError(apiData);
         }
@@ -1143,7 +1159,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('🔒 Vous devez vous connecter pour accéder à votre profil'),
+          content: const Text(
+              '🔒 Vous devez vous connecter pour accéder à votre profil'),
           backgroundColor: Colors.orange,
           duration: const Duration(seconds: 5),
           action: SnackBarAction(
@@ -1212,7 +1229,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('📱 Bienvenue ${userProfile.firstName} ! Vous êtes maintenant sur le dashboard ✅'),
+            content: Text(
+                '📱 Bienvenue ${userProfile.firstName} ! Vous êtes maintenant sur le dashboard ✅'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 3),
             action: SnackBarAction(
@@ -1224,7 +1242,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       }
 
       print('✅ Notification système envoyée et évaluations notifiées');
-
     } catch (e) {
       print('❌ Erreur envoi notification: $e');
     }
@@ -1258,7 +1275,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('📱 [${Platform.isIOS ? "iOS" : "Android"}] Notification de test envoyée !'),
+            content: Text(
+                '📱 [${Platform.isIOS ? "iOS" : "Android"}] Notification de test envoyée !'),
             backgroundColor: Colors.blue,
             duration: const Duration(seconds: 2),
           ),
@@ -1305,8 +1323,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       // Envoyer immédiatement les notifications pour les évaluations urgentes
       await notifyUrgentEvaluations();
 
-      print('✅ Notifications programmées avec succès (incluant rappels automatiques)');
-
+      print(
+          '✅ Notifications programmées avec succès (incluant rappels automatiques)');
     } catch (e) {
       print('❌ Erreur programmation notifications: $e');
     }
@@ -1328,11 +1346,13 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               children: [
                 Text('Total notifications: ${status['total_pending']}'),
                 Text('Rappels 5min: ${status['periodic_reminders']}'),
-                Text('Reprogrammation: ${status['has_reprogramming'] ? "✅" : "❌"}'),
+                Text(
+                    'Reprogrammation: ${status['has_reprogramming'] ? "✅" : "❌"}'),
                 if (status['next_reminder'] != null)
                   Text('Prochain: ${status['next_reminder']}'),
                 if (status['error'] != null)
-                  Text('Erreur: ${status['error']}', style: const TextStyle(color: Colors.red)),
+                  Text('Erreur: ${status['error']}',
+                      style: const TextStyle(color: Colors.red)),
               ],
             ),
             actions: [
@@ -1352,7 +1372,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               TextButton(
                 onPressed: () async {
                   Navigator.pop(context);
-                  if (userProfile.id != null && upcomingEvaluations.isNotEmpty) {
+                  if (userProfile.id != null &&
+                      upcomingEvaluations.isNotEmpty) {
                     await BackgroundNotificationService.scheduleFromEvaluations(
                       userProfile.firstName,
                       userProfile.id!,
@@ -1424,7 +1445,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.error_outline, color: Colors.red, size: 50),
+                    const Icon(Icons.error_outline,
+                        color: Colors.red, size: 50),
                     const SizedBox(height: 20),
                     const Text('Impossible de charger la page'),
                     const SizedBox(height: 20),
@@ -1445,7 +1467,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 top: 10,
                 left: 20,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.orange,
                     borderRadius: BorderRadius.circular(20),
@@ -1458,7 +1481,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
                       ),
                       SizedBox(width: 8),
@@ -1472,7 +1496,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               ),
 
             // NOUVEAU : Bouton de navigation dashboard (temporaire pour debug)
-            if (userProfile.id != null && userProfile.firstName != 'Utilisateur' && userProfile.firstName != 'Non connecté')
+            if (userProfile.id != null &&
+                userProfile.firstName != 'Utilisateur' &&
+                userProfile.firstName != 'Non connecté')
               Positioned(
                 top: 60,
                 right: 20,
@@ -1481,15 +1507,18 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   onPressed: () async {
                     print('🎯 Navigation manuelle vers dashboard...');
                     // CORRECTION : Format correct
-                    final dashboardUrl = 'https://ouibuddy.com/${userProfile.id}/dashboard';
+                    final dashboardUrl =
+                        'https://ouibuddy.com/${userProfile.id}/dashboard';
                     print('🚀 URL: $dashboardUrl');
 
                     await controller.loadRequest(Uri.parse(dashboardUrl));
 
                     // Vérifier après 3 secondes
                     Future.delayed(const Duration(seconds: 3), () async {
-                      final currentUrl = await controller.runJavaScriptReturningResult('window.location.href');
-                      print('📍 Nouvelle URL: ${currentUrl?.toString().replaceAll('"', '')}');
+                      final currentUrl = await controller
+                          .runJavaScriptReturningResult('window.location.href');
+                      print(
+                          '📍 Nouvelle URL: ${currentUrl?.toString().replaceAll('"', '')}');
                     });
                   },
                   backgroundColor: Colors.green,
@@ -1520,7 +1549,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               ),
 
             // Floating Action Button pour notifications urgentes
-            if (showEvaluations && upcomingEvaluations.any((e) => e.isToday || e.isTomorrow))
+            if (showEvaluations &&
+                upcomingEvaluations.any((e) => e.isToday || e.isTomorrow))
               Positioned(
                 bottom: 160,
                 right: 20,
@@ -1530,7 +1560,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     await notifyUrgentEvaluations();
                   },
                   backgroundColor: Colors.red,
-                  child: const Icon(Icons.notification_important, color: Colors.white),
+                  child: const Icon(Icons.notification_important,
+                      color: Colors.white),
                   tooltip: 'Notifier évaluations urgentes',
                 ),
               ),
@@ -1576,7 +1607,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                               fontSize: 10,
                             ),
                           ),
-                          if (upcomingEvaluations.any((e) => e.isToday || e.isTomorrow))
+                          if (upcomingEvaluations
+                              .any((e) => e.isToday || e.isTomorrow))
                             Text(
                               '🚨 ${upcomingEvaluations.where((e) => e.isToday || e.isTomorrow).length} urgentes !',
                               style: const TextStyle(
@@ -1622,7 +1654,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               left: 20,
               right: 80, // Laisser de la place pour les FAB à droite
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.blue.shade100.withOpacity(0.9),
                   borderRadius: BorderRadius.circular(30),
@@ -1654,7 +1687,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                           children: [
                             Icon(
                               Icons.assignment,
-                              color: showEvaluations ? Colors.green : Colors.blue,
+                              color:
+                                  showEvaluations ? Colors.green : Colors.blue,
                             ),
                             if (upcomingEvaluations.isNotEmpty)
                               Positioned(
@@ -1690,14 +1724,18 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                             fetchUserEvaluations();
                           }
                         },
-                        tooltip: showEvaluations ? 'Voir évaluations' : 'Charger évaluations',
+                        tooltip: showEvaluations
+                            ? 'Voir évaluations'
+                            : 'Charger évaluations',
                       ),
 
                     // Bouton notifications
                     IconButton(
                       icon: Icon(
                         Icons.notifications,
-                        color: notificationsInitialized ? Colors.green : Colors.red,
+                        color: notificationsInitialized
+                            ? Colors.green
+                            : Colors.red,
                       ),
                       onPressed: () async {
                         if (notificationsInitialized) {
@@ -1705,7 +1743,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                         } else {
                           if (Platform.isIOS) {
                             // Demander les permissions iOS
-                            final bool granted = await NotificationService.requestPermissions();
+                            final bool granted =
+                                await NotificationService.requestPermissions();
                             setState(() {
                               notificationsInitialized = granted;
                             });
@@ -1733,7 +1772,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                           showDialog(
                             context: context,
                             builder: (context) => AlertDialog(
-                              title: Text('👤 Profil Utilisateur ${Platform.isIOS ? "🍎" : "🤖"}'),
+                              title: Text(
+                                  '👤 Profil Utilisateur ${Platform.isIOS ? "🍎" : "🤖"}'),
                               content: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1747,11 +1787,16 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                                   if (userProfile.userId != null)
                                     Text('User ID: ${userProfile.userId}'),
                                   const SizedBox(height: 10),
-                                  Text('Plateforme: ${Platform.isIOS ? "iOS" : "Android"}'),
-                                  Text('Session: ${sessionToken != null ? "✅ Active" : "❌ Inactive"}'),
-                                  Text('Authentifié: ${userProfile.isAuthenticated ? "✅ Oui" : "❌ Non"}'),
-                                  Text('Notifications: ${notificationsInitialized ? "✅ Actives" : "❌ Inactives"}'),
-                                  Text('Évaluations: ${upcomingEvaluations.length} à venir'),
+                                  Text(
+                                      'Plateforme: ${Platform.isIOS ? "iOS" : "Android"}'),
+                                  Text(
+                                      'Session: ${sessionToken != null ? "✅ Active" : "❌ Inactive"}'),
+                                  Text(
+                                      'Authentifié: ${userProfile.isAuthenticated ? "✅ Oui" : "❌ Non"}'),
+                                  Text(
+                                      'Notifications: ${notificationsInitialized ? "✅ Actives" : "❌ Inactives"}'),
+                                  Text(
+                                      'Évaluations: ${upcomingEvaluations.length} à venir'),
                                   if (upcomingEvaluations.isNotEmpty) ...[
                                     const SizedBox(height: 5),
                                     Text(
@@ -1805,15 +1850,15 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                             _showReminderStatus();
                             break;
                           case 'test_complet':
-                            if (notificationsInitialized && userProfile.id != null) {
+                            if (notificationsInitialized &&
+                                userProfile.id != null) {
                               await NotificationService.runFullTest(
-                                  userProfile.firstName,
-                                  userProfile.id!
-                              );
+                                  userProfile.firstName, userProfile.id!);
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text('🧪 Test complet lancé sur ${Platform.isIOS ? "iOS" : "Android"} ! Vérifiez vos notifications'),
+                                    content: Text(
+                                        '🧪 Test complet lancé sur ${Platform.isIOS ? "iOS" : "Android"} ! Vérifiez vos notifications'),
                                     backgroundColor: Colors.purple,
                                   ),
                                 );
@@ -1825,8 +1870,10 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                             break;
                           case 'force_dashboard':
                             if (userProfile.id != null) {
-                              final dashboardUrl = 'https://ouibuddy.com/${userProfile.id}/dashboard';
-                              await controller.loadRequest(Uri.parse(dashboardUrl));
+                              final dashboardUrl =
+                                  'https://ouibuddy.com/${userProfile.id}/dashboard';
+                              await controller
+                                  .loadRequest(Uri.parse(dashboardUrl));
                             }
                             break;
                         }
@@ -1854,12 +1901,14 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                               ],
                             ),
                           ),
-                        if (userProfile.id != null && upcomingEvaluations.isNotEmpty)
+                        if (userProfile.id != null &&
+                            upcomingEvaluations.isNotEmpty)
                           const PopupMenuItem(
                             value: 'notifier_urgentes',
                             child: Row(
                               children: [
-                                Icon(Icons.notification_important, color: Colors.red),
+                                Icon(Icons.notification_important,
+                                    color: Colors.red),
                                 SizedBox(width: 8),
                                 Text('Notifier urgentes'),
                               ],
@@ -1910,7 +1959,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       } else {
         await fetchUserEvaluationsAndroid();
       }
-
     } catch (e) {
       print('❌ Erreur générale: $e');
       setState(() {
@@ -1987,7 +2035,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
 
       await Future.delayed(const Duration(seconds: 3));
       await processEvaluationResults();
-
     } catch (e) {
       print('❌ [iOS] Erreur évaluations: $e');
       setState(() {
@@ -2052,14 +2099,17 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       try {
         String cleanDebugInfo = debugInfo.toString();
         if (cleanDebugInfo.startsWith('"') && cleanDebugInfo.endsWith('"')) {
-          cleanDebugInfo = cleanDebugInfo.substring(1, cleanDebugInfo.length - 1);
+          cleanDebugInfo =
+              cleanDebugInfo.substring(1, cleanDebugInfo.length - 1);
         }
         cleanDebugInfo = cleanDebugInfo.replaceAll('\\"', '"');
 
         final debug = json.decode(cleanDebugInfo);
         print('🔍 [${Platform.isIOS ? "iOS" : "Android"}] Debug info: $debug');
 
-        if ((debug['status'] == 'success' || debug['status'] == 'ios_success') && debug['hasData'] == true) {
+        if ((debug['status'] == 'success' ||
+                debug['status'] == 'ios_success') &&
+            debug['hasData'] == true) {
           final fullData = await controller.runJavaScriptReturningResult('''
             window.debugApiData ? JSON.stringify(window.debugApiData) : null
           ''');
@@ -2087,25 +2137,28 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               });
 
               // NOUVEAU : Programmer automatiquement les rappels après récupération
-              if (evaluations.isNotEmpty && userProfile.id != null && notificationsInitialized) {
+              if (evaluations.isNotEmpty &&
+                  userProfile.id != null &&
+                  notificationsInitialized) {
                 await BackgroundNotificationService.scheduleFromEvaluations(
                   userProfile.firstName,
                   userProfile.id!,
                   evaluations,
                 );
-                print('🔄 Rappels automatiques mis à jour avec ${evaluations.length} évaluations');
+                print(
+                    '🔄 Rappels automatiques mis à jour avec ${evaluations.length} évaluations');
               }
 
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('✅ [${Platform.isIOS ? "iOS" : "Android"}] ${evaluations.length} évaluations trouvées !'),
+                    content: Text(
+                        '✅ [${Platform.isIOS ? "iOS" : "Android"}] ${evaluations.length} évaluations trouvées !'),
                     backgroundColor: Colors.green,
                     duration: const Duration(seconds: 3),
                   ),
                 );
               }
-
             } catch (parseError) {
               print('❌ Erreur parsing avec EvaluationService: $parseError');
               throw parseError;
@@ -2114,7 +2167,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             throw Exception('Impossible de récupérer les données complètes');
           }
         } else {
-          String errorMsg = debug['error']?.toString() ?? 'Erreur de récupération des données';
+          String errorMsg = debug['error']?.toString() ??
+              'Erreur de récupération des données';
           throw Exception(errorMsg);
         }
       } catch (e) {
@@ -2134,9 +2188,10 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
 
     try {
-      final urgentEvaluations = upcomingEvaluations.where((eval) =>
-      eval.isToday || eval.isTomorrow || eval.daysUntil <= 2
-      ).toList();
+      final urgentEvaluations = upcomingEvaluations
+          .where(
+              (eval) => eval.isToday || eval.isTomorrow || eval.daysUntil <= 2)
+          .toList();
 
       if (urgentEvaluations.isEmpty) {
         print('📱 Aucune évaluation urgente à notifier');
@@ -2180,8 +2235,10 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
 
       if (urgentEvaluations.length > 1) {
         final todayCount = urgentEvaluations.where((e) => e.isToday).length;
-        final tomorrowCount = urgentEvaluations.where((e) => e.isTomorrow).length;
-        final soonCount = urgentEvaluations.where((e) => !e.isToday && !e.isTomorrow).length;
+        final tomorrowCount =
+            urgentEvaluations.where((e) => e.isTomorrow).length;
+        final soonCount =
+            urgentEvaluations.where((e) => !e.isToday && !e.isTomorrow).length;
 
         String summaryBody = '';
         if (todayCount > 0) {
@@ -2208,8 +2265,11 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('📱 [${Platform.isIOS ? "iOS" : "Android"}] ${urgentEvaluations.length} notifications envoyées pour les évaluations urgentes'),
-            backgroundColor: urgentEvaluations.any((e) => e.isToday) ? Colors.red : Colors.orange,
+            content: Text(
+                '📱 [${Platform.isIOS ? "iOS" : "Android"}] ${urgentEvaluations.length} notifications envoyées pour les évaluations urgentes'),
+            backgroundColor: urgentEvaluations.any((e) => e.isToday)
+                ? Colors.red
+                : Colors.orange,
             duration: const Duration(seconds: 4),
             action: SnackBarAction(
               label: 'Voir',
@@ -2218,7 +2278,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           ),
         );
       }
-
     } catch (e) {
       print('❌ Erreur envoi notifications évaluations: $e');
 
@@ -2257,7 +2316,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-
             Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -2286,9 +2344,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 ],
               ),
             ),
-
             const Divider(height: 1),
-
             Expanded(
               child: EvaluationsList(
                 evaluations: upcomingEvaluations,
