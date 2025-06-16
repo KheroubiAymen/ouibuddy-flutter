@@ -1,4 +1,5 @@
-// NOUVEAU FICHIER : background_notification_service.dart
+// FICHIER MODIFIÉ : background_notification_service.dart
+// Changements pour passer de 5 minutes à 8 heures
 
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -8,13 +9,13 @@ import 'dart:convert';
 import 'notification_service.dart';
 
 class BackgroundNotificationService {
-  static const String _backgroundChannelId = 'background_reminders';
+  static const String _backgroundChannelId = 'background_reminders_8h'; // MODIFIÉ : ajouté _8h
   static const int _backgroundNotificationId = 5000;
   static const int _periodicReminderBaseId = 6000;
 
   // Initialiser le service de notifications en arrière-plan
   static Future<void> initialize() async {
-    print('🔄 Initialisation service notifications arrière-plan...');
+    print('🔄 Initialisation service notifications arrière-plan (8h)...'); // MODIFIÉ
 
     try {
       // Initialiser les fuseaux horaires
@@ -23,7 +24,7 @@ class BackgroundNotificationService {
       // Créer le canal de notification pour l'arrière-plan
       await _createBackgroundNotificationChannel();
 
-      print('✅ Service arrière-plan initialisé');
+      print('✅ Service arrière-plan (8h) initialisé'); // MODIFIÉ
     } catch (e) {
       print('❌ Erreur initialisation arrière-plan: $e');
     }
@@ -42,8 +43,8 @@ class BackgroundNotificationService {
       await androidImplementation.createNotificationChannel(
         const AndroidNotificationChannel(
           _backgroundChannelId,
-          'Rappels automatiques',
-          description: 'Rappels automatiques des évaluations toutes les 5 minutes',
+          'Rappels automatiques (8h)', // MODIFIÉ
+          description: 'Rappels automatiques des évaluations toutes les 8 heures', // MODIFIÉ
           importance: Importance.high,
           enableVibration: true,
           playSound: true,
@@ -51,11 +52,11 @@ class BackgroundNotificationService {
         ),
       );
 
-      print('📺 Canal de notifications arrière-plan créé');
+      print('📺 Canal de notifications arrière-plan (8h) créé'); // MODIFIÉ
     }
   }
 
-  // Programmer les rappels toutes les 5 minutes
+  // MODIFIÉ : Programmer les rappels toutes les 8 heures
   static Future<void> schedulePeriodicReminders({
     required String userName,
     required int userId,
@@ -65,7 +66,7 @@ class BackgroundNotificationService {
     FlutterLocalNotificationsPlugin();
 
     try {
-      print('⏰ Programmation rappels périodiques toutes les 5 minutes...');
+      print('⏰ Programmation rappels périodiques toutes les 8 heures...'); // MODIFIÉ
 
       // Annuler les anciens rappels périodiques
       await cancelPeriodicReminders();
@@ -75,25 +76,26 @@ class BackgroundNotificationService {
         return;
       }
 
-      // Programmer les rappels pour les 2 prochaines heures (24 rappels de 5 min)
+      // MODIFIÉ : Programmer les rappels pour les 7 prochains jours (21 rappels de 8h)
+      // 7 jours × 3 rappels par jour = 21 rappels au total
       final now = tz.TZDateTime.now(tz.local);
 
-      for (int i = 1; i <= 24; i++) { // 24 rappels = 2 heures
-        final reminderTime = now.add(Duration(minutes: i * 5));
+      for (int i = 1; i <= 21; i++) { // MODIFIÉ : 21 rappels au lieu de 24
+        final reminderTime = now.add(Duration(hours: i * 8)); // MODIFIÉ : 8 heures au lieu de 5 minutes
 
         // Créer le message de rappel
         String reminderMessage = _createReminderMessage(urgentEvaluations, i);
 
         await notifications.zonedSchedule(
           _periodicReminderBaseId + i,
-          '🔔 Rappel évaluations',
+          '🔔 Rappel évaluations (8h)', // MODIFIÉ
           reminderMessage,
           reminderTime,
           NotificationDetails(
             android: AndroidNotificationDetails(
               _backgroundChannelId,
-              'Rappels automatiques',
-              channelDescription: 'Rappels automatiques des évaluations',
+              'Rappels automatiques (8h)', // MODIFIÉ
+              channelDescription: 'Rappels automatiques des évaluations toutes les 8h', // MODIFIÉ
               importance: _getImportanceForReminder(urgentEvaluations),
               priority: _getPriorityForReminder(urgentEvaluations),
               icon: '@mipmap/ic_launcher',
@@ -104,8 +106,8 @@ class BackgroundNotificationService {
               ongoing: false,
               styleInformation: BigTextStyleInformation(
                 reminderMessage,
-                summaryText: 'OuiBuddy - Rappel automatique',
-                contentTitle: '🔔 Rappel évaluations',
+                summaryText: 'OuiBuddy - Rappel automatique (8h)', // MODIFIÉ
+                contentTitle: '🔔 Rappel évaluations (8h)', // MODIFIÉ
               ),
             ),
             iOS: DarwinNotificationDetails(
@@ -113,8 +115,8 @@ class BackgroundNotificationService {
               presentBadge: true,
               presentSound: true,
               sound: 'default',
-              subtitle: 'Rappel automatique',
-              threadIdentifier: 'periodic_reminder',
+              subtitle: 'Rappel automatique (8h)', // MODIFIÉ
+              threadIdentifier: 'periodic_reminder_8h', // MODIFIÉ
               interruptionLevel: _hasEvaluationsToday(urgentEvaluations)
                   ? InterruptionLevel.critical
                   : InterruptionLevel.active,
@@ -124,7 +126,7 @@ class BackgroundNotificationService {
           uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
           payload: json.encode({
-            'type': 'periodic_reminder',
+            'type': 'periodic_reminder_8h', // MODIFIÉ
             'user_id': userId,
             'user_name': userName,
             'reminder_number': i,
@@ -134,17 +136,17 @@ class BackgroundNotificationService {
         );
       }
 
-      print('✅ ${24} rappels périodiques programmés pour les 2 prochaines heures');
+      print('✅ ${21} rappels périodiques (8h) programmés pour les 7 prochains jours'); // MODIFIÉ
 
-      // Programmer la reprogrammation automatique dans 2 heures
+      // MODIFIÉ : Programmer la reprogrammation automatique dans 7 jours
       await _scheduleReprogramming(userName, userId, urgentEvaluations);
 
     } catch (e) {
-      print('❌ Erreur programmation rappels périodiques: $e');
+      print('❌ Erreur programmation rappels périodiques (8h): $e'); // MODIFIÉ
     }
   }
 
-  // Créer le message de rappel personnalisé
+  // MODIFIÉ : Créer le message de rappel personnalisé
   static String _createReminderMessage(List<Map<String, dynamic>> evaluations, int reminderNumber) {
     final todayEvaluations = evaluations.where((e) => e['isToday'] == true).toList();
     final tomorrowEvaluations = evaluations.where((e) => e['isTomorrow'] == true).toList();
@@ -179,9 +181,16 @@ class BackgroundNotificationService {
       message = '📚 Vérifiez vos évaluations à venir';
     }
 
-    // Ajouter un indicateur de progression
-    final timeElapsed = reminderNumber * 5;
-    message += '\n⏰ Rappel automatique (${timeElapsed}min)';
+    // MODIFIÉ : Ajouter un indicateur de progression en heures
+    final timeElapsed = reminderNumber * 8; // MODIFIÉ : 8 heures au lieu de 5 minutes
+    final daysElapsed = (timeElapsed / 24).floor();
+    final hoursRemaining = timeElapsed % 24;
+
+    if (daysElapsed > 0) {
+      message += '\n⏰ Rappel automatique (${daysElapsed}j ${hoursRemaining}h)'; // MODIFIÉ
+    } else {
+      message += '\n⏰ Rappel automatique (${hoursRemaining}h)'; // MODIFIÉ
+    }
 
     return message.trim();
   }
@@ -211,7 +220,7 @@ class BackgroundNotificationService {
     return evaluations.any((e) => e['isToday'] == true);
   }
 
-  // Programmer la reprogrammation automatique
+  // MODIFIÉ : Programmer la reprogrammation automatique
   static Future<void> _scheduleReprogramming(
       String userName,
       int userId,
@@ -221,17 +230,17 @@ class BackgroundNotificationService {
     FlutterLocalNotificationsPlugin();
 
     try {
-      final reprogramTime = tz.TZDateTime.now(tz.local).add(const Duration(hours: 2));
+      final reprogramTime = tz.TZDateTime.now(tz.local).add(const Duration(days: 7)); // MODIFIÉ : 7 jours au lieu de 2 heures
 
       await notifications.zonedSchedule(
         _backgroundNotificationId,
-        '🔄 Reprogrammation automatique',
-        'Renouvellement des rappels d\'évaluations',
+        '🔄 Reprogrammation automatique (8h)', // MODIFIÉ
+        'Renouvellement des rappels d\'évaluations toutes les 8h', // MODIFIÉ
         reprogramTime,
         const NotificationDetails(
           android: AndroidNotificationDetails(
             _backgroundChannelId,
-            'Rappels automatiques',
+            'Rappels automatiques (8h)', // MODIFIÉ
             importance: Importance.low,
             priority: Priority.low,
             ongoing: false,
@@ -247,16 +256,16 @@ class BackgroundNotificationService {
         uiLocalNotificationDateInterpretation:
         UILocalNotificationDateInterpretation.absoluteTime,
         payload: json.encode({
-          'type': 'auto_reprogram',
+          'type': 'auto_reprogram_8h', // MODIFIÉ
           'user_id': userId,
           'user_name': userName,
           'evaluations': urgentEvaluations,
         }),
       );
 
-      print('⏰ Reprogrammation automatique prévue dans 2 heures');
+      print('⏰ Reprogrammation automatique (8h) prévue dans 7 jours'); // MODIFIÉ
     } catch (e) {
-      print('❌ Erreur programmation reprogrammation: $e');
+      print('❌ Erreur programmation reprogrammation (8h): $e'); // MODIFIÉ
     }
   }
 
@@ -274,9 +283,9 @@ class BackgroundNotificationService {
         await notifications.cancel(_periodicReminderBaseId + i);
       }
 
-      print('✅ Tous les rappels périodiques annulés');
+      print('✅ Tous les rappels périodiques (8h) annulés'); // MODIFIÉ
     } catch (e) {
-      print('❌ Erreur annulation rappels périodiques: $e');
+      print('❌ Erreur annulation rappels périodiques (8h): $e'); // MODIFIÉ
     }
   }
 
@@ -302,7 +311,7 @@ class BackgroundNotificationService {
       })
           .toList();
 
-      print('📱 Programmation rappels automatiques pour ${urgentEvaluations.length} évaluations urgentes');
+      print('📱 Programmation rappels automatiques (8h) pour ${urgentEvaluations.length} évaluations urgentes'); // MODIFIÉ
 
       await schedulePeriodicReminders(
         userName: userName,
@@ -311,18 +320,18 @@ class BackgroundNotificationService {
       );
 
     } catch (e) {
-      print('❌ Erreur programmation depuis évaluations: $e');
+      print('❌ Erreur programmation depuis évaluations (8h): $e'); // MODIFIÉ
     }
   }
 
-  // Vérifier et reprogrammer si nécessaire (appelé au démarrage de l'app)
+  // MODIFIÉ : Vérifier et reprogrammer si nécessaire (appelé au démarrage de l'app)
   static Future<void> checkAndReschedule(
       String userName,
       int userId,
       List<dynamic> currentEvaluations,
       ) async {
     try {
-      print('🔍 Vérification des rappels programmés...');
+      print('🔍 Vérification des rappels programmés (8h)...'); // MODIFIÉ
 
       final FlutterLocalNotificationsPlugin notifications =
       FlutterLocalNotificationsPlugin();
@@ -332,18 +341,18 @@ class BackgroundNotificationService {
       notif.id >= _periodicReminderBaseId && notif.id < _periodicReminderBaseId + 100
       ).toList();
 
-      print('📋 ${periodicReminders.length} rappels périodiques trouvés');
+      print('📋 ${periodicReminders.length} rappels périodiques (8h) trouvés'); // MODIFIÉ
 
-      // Si moins de 5 rappels restants, reprogrammer
-      if (periodicReminders.length < 5) {
-        print('🔄 Moins de 5 rappels restants, reprogrammation...');
+      // MODIFIÉ : Si moins de 3 rappels restants (au lieu de 5), reprogrammer
+      if (periodicReminders.length < 3) { // MODIFIÉ : 3 au lieu de 5 car les rappels sont plus espacés
+        print('🔄 Moins de 3 rappels (8h) restants, reprogrammation...'); // MODIFIÉ
         await scheduleFromEvaluations(userName, userId, currentEvaluations);
       } else {
-        print('✅ Rappels suffisants, aucune action nécessaire');
+        print('✅ Rappels (8h) suffisants, aucune action nécessaire'); // MODIFIÉ
       }
 
     } catch (e) {
-      print('❌ Erreur vérification rappels: $e');
+      print('❌ Erreur vérification rappels (8h): $e'); // MODIFIÉ
     }
   }
 
@@ -369,7 +378,7 @@ class BackgroundNotificationService {
             : null,
       };
     } catch (e) {
-      print('❌ Erreur récupération statut: $e');
+      print('❌ Erreur récupération statut (8h): $e'); // MODIFIÉ
       return {
         'total_pending': 0,
         'periodic_reminders': 0,
