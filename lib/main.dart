@@ -119,7 +119,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   bool tokenRetrieved = false; // Flag pour savoir si on a déjà récupéré le token
   bool isTokenRetrieval = false; // Flag pour éviter les tentatives multiples
   int tokenRetrievalAttempts = 0; // Compteur des tentatives
-  static const int maxTokenAttempts = 5; // Maximum 5 tentatives
+  static const int maxTokenAttempts = 10; // Maximum 10 tentatives au lieu de 5// Maximum 5 tentatives
 
   UserProfile userProfile = UserProfile.loading();
   bool notificationsInitialized = false;
@@ -142,9 +142,10 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   }
 
   // NOUVELLE MÉTHODE : Démarrer la récupération du token
+  // MODIFIÉE : Démarrer la récupération du token
   Future<void> _startTokenRetrieval() async {
-    // Attendre que la page se charge
-    await Future.delayed(const Duration(seconds: 3));
+    // Attendre 5 secondes que la page se charge
+    await Future.delayed(const Duration(seconds: 5));
     await _attemptTokenRetrieval();
   }
 
@@ -218,8 +219,10 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             });
             print('✅ Page finished: $url');
 
-            // MODIFIÉ : Seulement récupérer le token si pas encore fait
-            if (!tokenRetrieved && !isTokenRetrieval) {
+            // MODIFIÉ : Commencer la récupération seulement si on arrive sur le dashboard
+            if (!tokenRetrieved && !isTokenRetrieval &&
+                (url.contains('/dashboard') || url.contains('/301/dashboard'))) {
+              print('🎯 Arrivée sur dashboard détectée, démarrage récupération token');
               Future.delayed(const Duration(seconds: 2), () {
                 _attemptTokenRetrieval();
               });
@@ -284,6 +287,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   }
 
   // NOUVELLE MÉTHODE : Tentative de récupération du token
+  // MODIFIÉE : Tentative de récupération du token
+  // MODIFIÉE : Tentative de récupération du token avec retry toutes les 10 secondes
+  // MODIFIÉE : Tentative de récupération du token avec détection corrigée
   Future<void> _attemptTokenRetrieval() async {
     if (isTokenRetrieval || tokenRetrieved || tokenRetrievalAttempts >= maxTokenAttempts) {
       print('⚠️ Récupération token déjà en cours ou terminée');
@@ -295,7 +301,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     });
 
     tokenRetrievalAttempts++;
-    print('🔍 Tentative de récupération token #$tokenRetrievalAttempts');
+    print('🔍 Tentative de récupération token #$tokenRetrievalAttempts/$maxTokenAttempts');
 
     try {
       // Vérifier l'URL actuelle
@@ -304,26 +310,24 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
 
       print('🌐 URL actuelle pour token: $url');
 
-      // Si on est sur la page de login, attendre et réessayer
-      if (url.contains('/login') || url.contains('/auth')) {
-        print('🔒 Sur page de login, attente de connexion...');
-        setState(() {
-          isTokenRetrieval = false;
-        });
-
-        // Réessayer dans 5 secondes
-        Future.delayed(const Duration(seconds: 5), () {
-          if (!tokenRetrieved) {
-            _attemptTokenRetrieval();
-          }
-        });
-        return;
-      }
-
       // Récupérer les informations de session
       final sessionInfo = await extractLaravelSession();
-      if (sessionInfo != null && sessionInfo['hasActiveSession'] == true) {
-        print('✅ Token récupéré avec succès');
+
+      // CORRECTION : Vérifier si on a soit hasActiveSession=true SOIT un token dans hasActiveSession
+      bool hasValidSession = false;
+
+      if (sessionInfo != null) {
+        final activeSession = sessionInfo['hasActiveSession'];
+
+        // Session valide si c'est true OU si c'est une chaîne de caractères (le token CSRF)
+        hasValidSession = activeSession == true ||
+            (activeSession is String && activeSession.isNotEmpty);
+
+        print('🔍 Session active détectée: $hasValidSession (type: ${activeSession.runtimeType})');
+      }
+
+      if (hasValidSession) {
+        print('✅ Token/Session récupéré avec succès après $tokenRetrievalAttempts tentatives');
 
         // Récupérer le profil utilisateur
         await fetchUserProfileViaWebView();
@@ -340,18 +344,25 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         }
 
       } else {
-        print('❌ Échec récupération token, tentative ${tokenRetrievalAttempts}/$maxTokenAttempts');
+        // Continuer à réessayer
+        if (url.contains('/login') || url.contains('/auth')) {
+          print('🔒 Sur page de login, continue à chercher un token... (${tokenRetrievalAttempts}/$maxTokenAttempts)');
+        } else {
+          print('❌ Pas de token trouvé sur $url (${tokenRetrievalAttempts}/$maxTokenAttempts)');
+        }
+
         setState(() {
           isTokenRetrieval = false;
         });
 
         // Réessayer si pas encore au maximum
         if (tokenRetrievalAttempts < maxTokenAttempts) {
-          Future.delayed(const Duration(seconds: 3), () {
+          print('⏰ Prochaine tentative dans 10 secondes...');
+          Future.delayed(const Duration(seconds: 10), () {
             _attemptTokenRetrieval();
           });
         } else {
-          print('🚫 Maximum de tentatives atteint pour le token');
+          print('🚫 Maximum de tentatives atteint (${maxTokenAttempts}) pour le token');
           setState(() {
             userProfile = UserProfile.notAuthenticated();
           });
@@ -366,13 +377,13 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
 
       // Réessayer en cas d'erreur
       if (tokenRetrievalAttempts < maxTokenAttempts) {
-        Future.delayed(const Duration(seconds: 3), () {
+        print('⏰ Retry après erreur dans 10 secondes...');
+        Future.delayed(const Duration(seconds: 10), () {
           _attemptTokenRetrieval();
         });
       }
     }
   }
-
   // NOUVELLE MÉTHODE : Configuration des notifications une seule fois
   Future<void> _setupNotificationsOnce() async {
     if (userProfile.id == null || !notificationsInitialized) {
@@ -408,46 +419,51 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       print('🔍 Extraction session Laravel...');
 
       final result = await controller.runJavaScriptReturningResult('''
-        (function() {
-          try {
-            const cookies = document.cookie;
-            const sessionInfo = {
-              cookies: cookies,
-              laravel_session: null,
-              xsrf_token: null,
-              csrf_token: null,
-              hasSession: false
-            };
-            
-            const cookieArray = cookies.split(';');
-            for (let cookie of cookieArray) {
-              const [name, value] = cookie.trim().split('=');
-              if (name === 'laravel_session') {
-                sessionInfo.laravel_session = value;
-                sessionInfo.hasSession = true;
-              }
-              if (name === 'XSRF-TOKEN') {
-                sessionInfo.xsrf_token = decodeURIComponent(value);
-              }
+      (function() {
+        try {
+          const cookies = document.cookie;
+          const sessionInfo = {
+            cookies: cookies,
+            laravel_session: null,
+            xsrf_token: null,
+            csrf_token: null,
+            hasSession: false
+          };
+          
+          const cookieArray = cookies.split(';');
+          for (let cookie of cookieArray) {
+            const [name, value] = cookie.trim().split('=');
+            if (name === 'laravel_session') {
+              sessionInfo.laravel_session = value;
+              sessionInfo.hasSession = true;
             }
-            
-            const csrfMeta = document.querySelector('meta[name="csrf-token"]');
-            if (csrfMeta) {
-              sessionInfo.csrf_token = csrfMeta.getAttribute('content');
+            if (name === 'XSRF-TOKEN') {
+              sessionInfo.xsrf_token = decodeURIComponent(value);
             }
-            
-            sessionInfo.hasActiveSession = sessionInfo.laravel_session && 
-                                          (sessionInfo.xsrf_token || sessionInfo.csrf_token);
-            
-            return JSON.stringify(sessionInfo);
-          } catch (error) {
-            return JSON.stringify({
-              error: error.message,
-              hasActiveSession: false
-            });
           }
-        })()
-      ''');
+          
+          const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+          if (csrfMeta) {
+            sessionInfo.csrf_token = csrfMeta.getAttribute('content');
+          }
+          
+          // CORRECTION 1 : Forcer le retour à true/false
+          const currentUrl = window.location.href;
+          const isOnDashboard = currentUrl.includes('/dashboard') || currentUrl.includes('/301/dashboard');
+          
+          sessionInfo.hasActiveSession = ((sessionInfo.laravel_session && 
+                                         (sessionInfo.xsrf_token || sessionInfo.csrf_token)) ||
+                                        (isOnDashboard && sessionInfo.csrf_token)) ? true : false;
+          
+          return JSON.stringify(sessionInfo);
+        } catch (error) {
+          return JSON.stringify({
+            error: error.message,
+            hasActiveSession: false
+          });
+        }
+      })()
+    ''');
 
       if (result != null && result.toString() != 'null') {
         String cleanResult = result.toString();
@@ -463,7 +479,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         print('🍪 Session data: $sessionData');
 
         if (sessionData['hasActiveSession'] == true) {
-          sessionToken = sessionData['laravel_session'];
+          sessionToken = sessionData['laravel_session'] ?? 'dashboard_session';
           return sessionData;
         }
       }
