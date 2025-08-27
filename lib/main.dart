@@ -1399,273 +1399,85 @@ Future<void> _testMicrophone() async {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Stack(
-          children: [
-            // WebView principal
-            WebViewWidget(controller: controller),
+ @override
+Widget build(BuildContext context) {
+  return Scaffold(
+    body: SafeArea(
+      child: Stack(
+        children: [
+          // WebView principal
+          WebViewWidget(controller: controller),
 
-            // Indicateur de chargement
-            if (isLoading)
-              const Center(
-                child: CircularProgressIndicator(),
+          // Indicateur de chargement
+          if (isLoading)
+            const Center(
+              child: CircularProgressIndicator(),
+            ),
+
+          // Indicateur d'erreur
+          if (hasError)
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 50),
+                  const SizedBox(height: 20),
+                  const Text('Impossible de charger la page'),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      retryCount = 0;
+                      loadDirectUrl();
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Réessayer'),
+                  ),
+                ],
               ),
+            ),
 
-            // Indicateur d'erreur
-            if (hasError)
-              Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+          // Indicateur de récupération du token
+          if (isTokenRetrieval)
+            Positioned(
+              top: 10,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.blue,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.error_outline, color: Colors.red, size: 50),
-                    const SizedBox(height: 20),
-                    const Text('Impossible de charger la page'),
-                    const SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        retryCount = 0;
-                        loadDirectUrl();
-                      },
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Réessayer'),
+                    const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Token $tokenRetrievalAttempts/$maxTokenAttempts',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                      ),
                     ),
                   ],
                 ),
               ),
-
-            // Petit indicateur de statut utilisateur connecté
-            if (userProfile.id != null && !userProfile.loading)
-              Positioned(
-                top: 10,
-                left: 20,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: tokenRetrieved ? Colors.green : Colors.orange,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        tokenRetrieved ? Icons.check_circle : Icons.person,
-                        color: Colors.white,
-                        size: 14,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        userProfile.firstName,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-            // Indicateur statut permissions
-            if (permissionsInitialized)
-              Positioned(
-                top: 10,
-                right: 80,
-                child: GestureDetector(
-                  onTap: _showPermissionStatus,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: permissions.values.every((p) => p) ? Colors.green : Colors.orange,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          permissions.values.every((p) => p) ? Icons.security : Icons.warning,
-                          color: Colors.white,
-                          size: 12,
-                        ),
-                        const SizedBox(width: 2),
-                        Text(
-                          '${permissions.values.where((p) => p).length}/${permissions.length}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-            // Indicateur de récupération du token
-            if (isTokenRetrieval)
-              Positioned(
-                top: 10,
-                right: 20,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.blue,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(
-                        width: 12,
-                        height: 12,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Token $tokenRetrievalAttempts/$maxTokenAttempts',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
+            ),
+        ],
       ),
-      
-      // Menu d'actions flottant
-      floatingActionButton: tokenRetrieved ? FloatingActionButton(
-        onPressed: () => _showActionsMenu(),
-        backgroundColor: Colors.blue,
-        child: const Icon(Icons.add, color: Colors.white),
-      ) : null,
-    );
-  }
+    ),
+  );
+}
 
-  // Menu d'actions
-  void _showActionsMenu() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Actions disponibles',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            
-            // Test caméra
-            ListTile(
-              leading: Icon(
-                Icons.camera_alt,
-                color: permissions['camera']! ? Colors.green : Colors.red,
-              ),
-              title: const Text('Tester la caméra'),
-              subtitle: Text(permissions['camera']! ? 'Autorisée' : 'Non autorisée'),
-              onTap: () {
-                Navigator.pop(context);
-                _testCamera();
-              },
-            ),
-            
-            // Test galerie
-            ListTile(
-              leading: Icon(
-                Icons.photo_library,
-                color: permissions['photos']! ? Colors.green : Colors.red,
-              ),
-              title: const Text('Tester la galerie'),
-              subtitle: Text(permissions['photos']! ? 'Autorisée' : 'Non autorisée'),
-              onTap: () {
-                Navigator.pop(context);
-                _testGallery();
-              },
-            ),
-            
-            // Test fichiers
-            ListTile(
-              leading: Icon(
-                Icons.folder,
-                color: permissions['storage']! ? Colors.green : Colors.red,
-              ),
-              title: const Text('Sélectionner un fichier'),
-              subtitle: Text(permissions['storage']! ? 'Autorisée' : 'Non autorisée'),
-              onTap: () {
-                Navigator.pop(context);
-                _testFilePicker();
-              },
-            ),
-            
-            // Test microphone
-            ListTile(
-              leading: Icon(
-                Icons.mic,
-                color: permissions['microphone']! ? Colors.green : Colors.red,
-              ),
-              title: const Text('Tester le microphone'),
-              subtitle: Text(permissions['microphone']! ? 'Autorisée' : 'Non autorisée'),
-              onTap: () {
-                Navigator.pop(context);
-                _testMicrophone();
-              },
-            ),
-            
-            const Divider(),
-            
-            // Autres actions existantes
-            ListTile(
-              leading: const Icon(Icons.school, color: Colors.blue),
-              title: const Text('Mes évaluations'),
-              onTap: () {
-                Navigator.pop(context);
-                _showEvaluationsBottomSheet();
-              },
-            ),
-            
-            ListTile(
-              leading: const Icon(Icons.notifications, color: Colors.orange),
-              title: const Text('Test notifications'),
-              onTap: () {
-                Navigator.pop(context);
-                testNotifications();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
+@override
+void dispose() {
+  WidgetsBinding.instance.removeObserver(this);
+  super.dispose();
 }
