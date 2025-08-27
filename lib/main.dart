@@ -225,219 +225,181 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // Tester la caméra - CORRIGÉ selon le modèle notifications
-  Future<void> _testCamera() async {
-    print('📸 [${Platform.isIOS ? "iOS" : "Android"}] Test caméra...');
+// Remplacez ces méthodes dans votre main.dart :
+
+// Tester la caméra - avec API native directe
+Future<void> _testCamera() async {
+  print('📸 Test caméra...');
+  
+  try {
+    // Demander directement via ImagePicker (qui gère les permissions iOS nativement)
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.camera);
     
-    // Vérifier permission d'abord
-    bool hasPermission = await _isPermissionGranted(Permission.camera, 'Camera');
-    
-    if (!hasPermission) {
-      print('❌ Permission caméra manquante - demande...');
-      
-      // Demander permission directement
-      hasPermission = await _requestSpecificPermission(Permission.camera, 'Camera');
-      
-      // Mettre à jour l'état
+    if (image != null) {
+      // Permission accordée et photo prise
       setState(() {
-        permissions['camera'] = hasPermission;
+        permissions['camera'] = true;
       });
       
-      if (!hasPermission) {
-        print('❌ Permission caméra refusée');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('❌ Permission caméra refusée'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-    }
-
-    try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(source: ImageSource.camera);
-      
-      if (image != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('📸 Photo prise: ${image.name}'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      print('❌ Erreur caméra: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ Erreur caméra: $e'),
-            backgroundColor: Colors.red,
+            content: Text('📸 Photo prise: ${image.name}'),
+            backgroundColor: Colors.green,
           ),
         );
       }
-    }
-  }
-
-  // Tester la galerie - CORRIGÉ selon le modèle notifications
-  Future<void> _testGallery() async {
-    print('🖼️ [${Platform.isIOS ? "iOS" : "Android"}] Test galerie...');
-    
-    bool hasPermission = await _isPermissionGranted(Permission.photos, 'Photos');
-    
-    if (!hasPermission) {
-      print('❌ Permission photos manquante - demande...');
-      
-      hasPermission = await _requestSpecificPermission(Permission.photos, 'Photos');
-      
+    } else {
+      // Vérifier si c'est un refus ou un cancel
       setState(() {
-        permissions['photos'] = hasPermission;
+        permissions['camera'] = false;
       });
-      
-      if (!hasPermission) {
-        print('❌ Permission photos refusée');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('❌ Permission galerie refusée'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
     }
-
-    try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-      
-      if (image != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('🖼️ Image sélectionnée: ${image.name}'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      print('❌ Erreur galerie: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Erreur galerie: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  // Tester fichiers - CORRIGÉ selon le modèle notifications
-  Future<void> _testFilePicker() async {
-    print('📄 [${Platform.isIOS ? "iOS" : "Android"}] Test fichiers...');
+  } catch (e) {
+    print('❌ Erreur caméra: $e');
+    setState(() {
+      permissions['camera'] = false;
+    });
     
-    bool hasPermission = await _isPermissionGranted(Permission.storage, 'Storage');
-    
-    if (!hasPermission) {
-      print('❌ Permission stockage manquante - demande...');
-      
-      hasPermission = await _requestSpecificPermission(Permission.storage, 'Storage');
-      
-      setState(() {
-        permissions['storage'] = hasPermission;
-      });
-      
-      if (!hasPermission) {
-        print('❌ Permission stockage refusée');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('❌ Permission fichiers refusée'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-    }
-
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'png'],
-        allowMultiple: false,
-      );
-
-      if (result != null && result.files.single.name != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('📄 Fichier sélectionné: ${result.files.single.name}'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      print('❌ Erreur sélecteur fichiers: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Erreur fichiers: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  // Test microphone (bonus) - selon le modèle notifications
-  Future<void> _testMicrophone() async {
-    print('🎤 [${Platform.isIOS ? "iOS" : "Android"}] Test microphone...');
-    
-    bool hasPermission = await _isPermissionGranted(Permission.microphone, 'Microphone');
-    
-    if (!hasPermission) {
-      print('❌ Permission microphone manquante - demande...');
-      
-      hasPermission = await _requestSpecificPermission(Permission.microphone, 'Microphone');
-      
-      setState(() {
-        permissions['microphone'] = hasPermission;
-      });
-      
-      if (!hasPermission) {
-        print('❌ Permission microphone refusée');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('❌ Permission microphone refusée'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-    }
-
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('🎤 Permission microphone accordée'),
-          backgroundColor: Colors.green,
+          content: Text('❌ Permission caméra refusée ou erreur'),
+          backgroundColor: Colors.red,
         ),
       );
     }
   }
+}
 
+// Tester la galerie - avec API native directe
+Future<void> _testGallery() async {
+  print('🖼️ Test galerie...');
+  
+  try {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    
+    if (image != null) {
+      setState(() {
+        permissions['photos'] = true;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🖼️ Image sélectionnée: ${image.name}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } else {
+      setState(() {
+        permissions['photos'] = false;
+      });
+    }
+  } catch (e) {
+    print('❌ Erreur galerie: $e');
+    setState(() {
+      permissions['photos'] = false;
+    });
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Permission galerie refusée ou erreur'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+}
+
+// Tester fichiers - avec API native directe
+Future<void> _testFilePicker() async {
+  print('📄 Test fichiers...');
+  
+  try {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'png'],
+      allowMultiple: false,
+    );
+
+    if (result != null && result.files.single.name != null) {
+      setState(() {
+        permissions['storage'] = true;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('📄 Fichier sélectionné: ${result.files.single.name}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } else {
+      setState(() {
+        permissions['storage'] = false;
+      });
+    }
+  } catch (e) {
+    print('❌ Erreur fichiers: $e');
+    setState(() {
+      permissions['storage'] = false;
+    });
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Permission fichiers refusée ou erreur'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+}
+
+// Test microphone - utiliser un plugin audio natif si disponible
+Future<void> _testMicrophone() async {
+  print('🎤 Test microphone...');
+  
+  // Pour le microphone, on doit utiliser permission_handler car il n'y a pas d'API directe
+  try {
+    final status = await Permission.microphone.request();
+    
+    setState(() {
+      permissions['microphone'] = status.isGranted;
+    });
+    
+    if (status.isGranted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🎤 Permission microphone accordée'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Permission microphone refusée'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  } catch (e) {
+    print('❌ Erreur microphone: $e');
+    setState(() {
+      permissions['microphone'] = false;
+    });
+  }
+}
   // Afficher un dialogue d'autorisation (pour redirection vers paramètres)
   void _showPermissionDialog(String permissionName, String permissionKey) {
     showDialog(
