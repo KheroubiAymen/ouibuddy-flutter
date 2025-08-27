@@ -45,20 +45,106 @@
    <true/>
    <key>UIApplicationSupportsIndirectInputEvents</key>
    <true/>
-
-   <!-- AJOUT : CONFIGURATIONS POUR LES NOTIFICATIONS iOS -->
-   <key>UIBackgroundModes</key>
-   <array>
-      <string>fetch</string>
-      <string>remote-notification</string>
-   </array>
-   <key>NSUserNotificationAlertStyle</key>
-   <string>alert</string>
-   <key>NSUserNotificationAllowAlertStyle</key>
-   <true/>
-   <key>NSUserNotificationAllowBadgeStyle</key>
-   <true/>
-   <key>NSUserNotificationAllowSoundStyle</key>
-   <true/>
+    
+    <!-- NOUVELLES PERMISSIONS AJOUTÉES -->
+    
+    <!-- Permission appareil photo -->
+    <key>NSCameraUsageDescription</key>
+    <string>OuiBuddy souhaite accéder à votre appareil photo pour permettre la prise de photos et l'upload de documents visuels dans vos évaluations et travaux scolaires.</string>
+    
+    <!-- Permission galerie photos -->
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>OuiBuddy souhaite accéder à vos photos pour vous permettre de sélectionner et partager des images dans vos devoirs et évaluations.</string>
+    
+    <!-- Permission galerie (ajout de photos) -->
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>OuiBuddy souhaite enregistrer des photos dans votre galerie pour sauvegarder vos captures d'écran et documents.</string>
+    
+    <!-- Permission microphone -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>OuiBuddy souhaite accéder à votre microphone pour permettre l'enregistrement audio dans le cadre de vos présentations et exercices oraux.</string>
+    
+    <!-- Permission documents et fichiers -->
+    <key>NSDocumentPickerUsageDescription</key>
+    <string>OuiBuddy souhaite accéder à vos documents pour vous permettre de sélectionner et télécharger des fichiers pour vos devoirs et évaluations.</string>
+    
+    <!-- Permission de navigation dans les fichiers -->
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>OuiBuddy souhaite accéder au dossier Bureau pour faciliter la sélection de vos documents scolaires.</string>
+    
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>OuiBuddy souhaite accéder au dossier Téléchargements pour récupérer vos fichiers téléchargés.</string>
+    
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>OuiBuddy souhaite accéder au dossier Documents pour gérer vos fichiers scolaires.</string>
+    
+    <!-- Support des types de fichiers -->
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Public Data</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.data</string>
+                <string>public.image</string>
+                <string>public.audiovisual-content</string>
+                <string>com.adobe.pdf</string>
+                <string>org.openxmlformats.wordprocessingml.document</string>
+                <string>com.microsoft.powerpoint.ppt</string>
+            </array>
+        </dict>
+    </array>
+    
+    <!-- Types UTI supportés -->
+    <key>UTImportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeDescription</key>
+            <string>Document scolaire</string>
+            <key>UTTypeIdentifier</key>
+            <string>com.ouibuddy.document</string>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>pdf</string>
+                    <string>doc</string>
+                    <string>docx</string>
+                    <string>xls</string>
+                    <string>xlsx</string>
+                    <string>ppt</string>
+                    <string>pptx</string>
+                    <string>txt</string>
+                    <string>rtf</string>
+                </array>
+            </dict>
+        </dict>
+    </array>
+    
+    <!-- Configuration pour iOS 14+ -->
+    <key>LSSupportsOpeningDocumentsInPlace</key>
+    <true/>
+    
+    <!-- Support URL schemes personnalisés -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>ouibuddy.document</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>ouibuddy</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
