@@ -228,111 +228,172 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // Tester la caméra
   Future<void> _testCamera() async {
-    if (!permissions['camera']!) {
+  // Demander directement la permission si pas accordée
+  if (!permissions['camera']!) {
+    final status = await Permission.camera.request();
+    
+    setState(() {
+      permissions['camera'] = status.isGranted;
+    });
+    
+    // Si définitivement refusée, rediriger vers paramètres
+    if (status.isPermanentlyDenied) {
       _showPermissionDialog('Appareil photo', 'Camera');
       return;
     }
-
-    try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(source: ImageSource.camera);
-      
-      if (image != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('📸 Photo prise: ${image.name}'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      print('❌ Erreur caméra: $e');
+    
+    // Si refusée mais pas définitivement, arrêter ici
+    if (!status.isGranted) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ Erreur caméra: $e'),
-            backgroundColor: Colors.red,
+            content: Text('Permission caméra refusée'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+  }
+
+  try {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.camera);
+    
+    if (image != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('📸 Photo prise: ${image.name}'),
+            backgroundColor: Colors.green,
           ),
         );
       }
     }
+  } catch (e) {
+    print('❌ Erreur caméra: $e');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Erreur caméra: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
+}
 
-  // Tester la galerie
-  Future<void> _testGallery() async {
-    if (!permissions['photos']!) {
+// Tester la galerie - CORRIGÉ  
+Future<void> _testGallery() async {
+  if (!permissions['photos']!) {
+    final status = await Permission.photos.request();
+    
+    setState(() {
+      permissions['photos'] = status.isGranted;
+    });
+    
+    if (status.isPermanentlyDenied) {
       _showPermissionDialog('Galerie photos', 'Photos');
       return;
     }
-
-    try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-      
-      if (image != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('🖼️ Image sélectionnée: ${image.name}'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      print('❌ Erreur galerie: $e');
+    
+    if (!status.isGranted) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ Erreur galerie: $e'),
-            backgroundColor: Colors.red,
+            content: Text('Permission galerie refusée'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+  }
+
+  try {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    
+    if (image != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🖼️ Image sélectionnée: ${image.name}'),
+            backgroundColor: Colors.green,
           ),
         );
       }
     }
+  } catch (e) {
+    print('❌ Erreur galerie: $e');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Erreur galerie: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
+}
 
-  // Tester le sélecteur de fichiers
-  Future<void> _testFilePicker() async {
-    if (!permissions['storage']!) {
+// Tester le sélecteur de fichiers - CORRIGÉ
+Future<void> _testFilePicker() async {
+  if (!permissions['storage']!) {
+    final status = await Permission.storage.request();
+    
+    setState(() {
+      permissions['storage'] = status.isGranted;
+    });
+    
+    if (status.isPermanentlyDenied) {
       _showPermissionDialog('Fichiers', 'Storage');
       return;
     }
-
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'png'],
-        allowMultiple: false,
-      );
-
-      if (result != null && result.files.single.name != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('📄 Fichier sélectionné: ${result.files.single.name}'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      print('❌ Erreur sélecteur fichiers: $e');
+    
+    if (!status.isGranted) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ Erreur fichiers: $e'),
-            backgroundColor: Colors.red,
+            content: Text('Permission fichiers refusée'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+  }
+
+  try {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'png'],
+      allowMultiple: false,
+    );
+
+    if (result != null && result.files.single.name != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('📄 Fichier sélectionné: ${result.files.single.name}'),
+            backgroundColor: Colors.green,
           ),
         );
       }
     }
+  } catch (e) {
+    print('❌ Erreur sélecteur fichiers: $e');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Erreur fichiers: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
-
+}
   // Afficher un dialogue d'autorisation
   void _showPermissionDialog(String permissionName, String permissionKey) {
     showDialog(
