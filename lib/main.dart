@@ -13,6 +13,12 @@ import 'dart:async';
 import 'notification_service.dart';
 import 'dart:io';
 
+// NOUVELLES PERMISSIONS AJOUTÉES
+import 'package:permission_handler/permission_handler.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:camera/camera.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -116,10 +122,10 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
 
   // NOUVELLES VARIABLES POUR LA GESTION DU TOKEN
   String? sessionToken;
-  bool tokenRetrieved = false; // Flag pour savoir si on a déjà récupéré le token
-  bool isTokenRetrieval = false; // Flag pour éviter les tentatives multiples
-  int tokenRetrievalAttempts = 0; // Compteur des tentatives
-  static const int maxTokenAttempts = 10; // Maximum 10 tentatives au lieu de 5// Maximum 5 tentatives
+  bool tokenRetrieved = false; 
+  bool isTokenRetrieval = false;
+  int tokenRetrievalAttempts = 0;
+  static const int maxTokenAttempts = 10;
 
   UserProfile userProfile = UserProfile.loading();
   bool notificationsInitialized = false;
@@ -130,6 +136,15 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   String? evaluationError;
   bool showEvaluations = false;
 
+  // NOUVELLES VARIABLES POUR LES PERMISSIONS
+  Map<String, bool> permissions = {
+    'camera': false,
+    'microphone': false,
+    'storage': false,
+    'photos': false,
+  };
+  bool permissionsInitialized = false;
+
   @override
   void initState() {
     super.initState();
@@ -137,12 +152,245 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     initController();
     WidgetsBinding.instance.addObserver(this);
 
-    // MODIFIÉ : Démarrer la récupération du token une seule fois
+    // NOUVEAU : Initialiser les permissions
+    _initializePermissions();
+
+    // Démarrer la récupération du token une seule fois
     _startTokenRetrieval();
   }
 
-  // NOUVELLE MÉTHODE : Démarrer la récupération du token
-  // MODIFIÉE : Démarrer la récupération du token
+  // NOUVELLES FONCTIONS POUR LES PERMISSIONS
+
+  // Initialiser et vérifier les permissions
+  Future<void> _initializePermissions() async {
+    try {
+      print('🔐 Initialisation des permissions...');
+      
+      // Vérifier les permissions actuelles
+      await _checkCurrentPermissions();
+      
+      // Demander les permissions manquantes
+      await _requestMissingPermissions();
+      
+      setState(() {
+        permissionsInitialized = true;
+      });
+      
+      print('✅ Permissions initialisées');
+      
+    } catch (e) {
+      print('❌ Erreur initialisation permissions: $e');
+    }
+  }
+
+  // Vérifier les permissions actuelles
+  Future<void> _checkCurrentPermissions() async {
+    final results = await Future.wait([
+      Permission.camera.status,
+      Permission.microphone.status,
+      Permission.storage.status,
+      Permission.photos.status,
+    ]);
+
+    setState(() {
+      permissions['camera'] = results[0].isGranted;
+      permissions['microphone'] = results[1].isGranted;
+      permissions['storage'] = results[2].isGranted;
+      permissions['photos'] = results[3].isGranted;
+    });
+
+    print('📱 Permissions actuelles: $permissions');
+  }
+
+  // Demander les permissions manquantes
+  Future<void> _requestMissingPermissions() async {
+    final permissionsToRequest = <Permission>[];
+    
+    if (!permissions['camera']!) permissionsToRequest.add(Permission.camera);
+    if (!permissions['microphone']!) permissionsToRequest.add(Permission.microphone);
+    if (!permissions['storage']!) permissionsToRequest.add(Permission.storage);
+    if (!permissions['photos']!) permissionsToRequest.add(Permission.photos);
+
+    if (permissionsToRequest.isNotEmpty) {
+      print('🔒 Demande de ${permissionsToRequest.length} permissions...');
+      
+      final results = await permissionsToRequest.request();
+      
+      // Mettre à jour l'état
+      results.forEach((permission, status) {
+        if (permission == Permission.camera) permissions['camera'] = status.isGranted;
+        if (permission == Permission.microphone) permissions['microphone'] = status.isGranted;
+        if (permission == Permission.storage) permissions['storage'] = status.isGranted;
+        if (permission == Permission.photos) permissions['photos'] = status.isGranted;
+      });
+
+      print('📱 Permissions après demande: $permissions');
+    }
+  }
+
+  // Tester la caméra
+  Future<void> _testCamera() async {
+    if (!permissions['camera']!) {
+      _showPermissionDialog('Appareil photo', 'Camera');
+      return;
+    }
+
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: ImageSource.camera);
+      
+      if (image != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('📸 Photo prise: ${image.name}'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ Erreur caméra: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur caméra: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Tester la galerie
+  Future<void> _testGallery() async {
+    if (!permissions['photos']!) {
+      _showPermissionDialog('Galerie photos', 'Photos');
+      return;
+    }
+
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+      
+      if (image != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('🖼️ Image sélectionnée: ${image.name}'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ Erreur galerie: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur galerie: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Tester le sélecteur de fichiers
+  Future<void> _testFilePicker() async {
+    if (!permissions['storage']!) {
+      _showPermissionDialog('Fichiers', 'Storage');
+      return;
+    }
+
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'png'],
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.single.name != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('📄 Fichier sélectionné: ${result.files.single.name}'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ Erreur sélecteur fichiers: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur fichiers: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Afficher un dialogue d'autorisation
+  void _showPermissionDialog(String permissionName, String permissionKey) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Permission $permissionName'),
+        content: Text(
+          'Pour utiliser cette fonctionnalité, OuiBuddy a besoin d\'accéder à votre $permissionName. '
+          'Veuillez autoriser l\'accès dans les paramètres.'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Plus tard'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              openAppSettings();
+            },
+            child: const Text('Paramètres'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Afficher le statut des permissions
+  void _showPermissionStatus() {
+    String status = '';
+    permissions.forEach((key, value) {
+      status += '${key.toUpperCase()}: ${value ? "✅" : "❌"}\n';
+    });
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Statut des permissions'),
+        content: Text(status),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _initializePermissions();
+            },
+            child: const Text('Actualiser'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // FIN DES NOUVELLES FONCTIONS POUR LES PERMISSIONS
+
   Future<void> _startTokenRetrieval() async {
     // Attendre 5 secondes que la page se charge
     await Future.delayed(const Duration(seconds: 5));
@@ -219,7 +467,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             });
             print('✅ Page finished: $url');
 
-            // MODIFIÉ : Commencer la récupération seulement si on arrive sur le dashboard
             if (!tokenRetrieved && !isTokenRetrieval &&
                 (url.contains('/dashboard') || url.contains('/301/dashboard'))) {
               print('🎯 Arrivée sur dashboard détectée, démarrage récupération token');
@@ -247,9 +494,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           onNavigationRequest: (request) {
             print('🧭 Navigation vers: ${request.url}');
 
-            // MODIFIÉ : Contrôler l'ouverture des liens externes
             if (!request.url.startsWith('https://ouibuddy.com')) {
-              // Empêcher l'ouverture automatique dans Safari pour les liens de paiement
               if (request.url.contains('stripe') ||
                   request.url.contains('payment') ||
                   request.url.contains('checkout')) {
@@ -257,7 +502,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 return NavigationDecision.prevent;
               }
 
-              // Pour les autres liens externes, ouvrir dans le navigateur
               launchUrl(Uri.parse(request.url), mode: LaunchMode.externalApplication);
               return NavigationDecision.prevent;
             }
@@ -277,7 +521,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     setState(() {
       isLoading = true;
       hasError = false;
-      // NE PAS réinitialiser le token si on l'a déjà
       if (!tokenRetrieved) {
         userProfile = UserProfile.loading();
         isCheckingAuth = false;
@@ -286,10 +529,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     controller.reload();
   }
 
-  // NOUVELLE MÉTHODE : Tentative de récupération du token
-  // MODIFIÉE : Tentative de récupération du token
-  // MODIFIÉE : Tentative de récupération du token avec retry toutes les 10 secondes
-  // MODIFIÉE : Tentative de récupération du token avec détection corrigée
   Future<void> _attemptTokenRetrieval() async {
     if (isTokenRetrieval || tokenRetrieved || tokenRetrievalAttempts >= maxTokenAttempts) {
       print('⚠️ Récupération token déjà en cours ou terminée');
@@ -304,22 +543,18 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     print('🔍 Tentative de récupération token #$tokenRetrievalAttempts/$maxTokenAttempts');
 
     try {
-      // Vérifier l'URL actuelle
       final currentUrl = await controller.runJavaScriptReturningResult('window.location.href');
       final url = currentUrl?.toString().replaceAll('"', '') ?? '';
 
       print('🌐 URL actuelle pour token: $url');
 
-      // Récupérer les informations de session
       final sessionInfo = await extractLaravelSession();
 
-      // CORRECTION : Vérifier si on a soit hasActiveSession=true SOIT un token dans hasActiveSession
       bool hasValidSession = false;
 
       if (sessionInfo != null) {
         final activeSession = sessionInfo['hasActiveSession'];
 
-        // Session valide si c'est true OU si c'est une chaîne de caractères (le token CSRF)
         hasValidSession = activeSession == true ||
             (activeSession is String && activeSession.isNotEmpty);
 
@@ -329,22 +564,18 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       if (hasValidSession) {
         print('✅ Token/Session récupéré avec succès après $tokenRetrievalAttempts tentatives');
 
-        // Récupérer le profil utilisateur
         await fetchUserProfileViaWebView();
 
-        // Marquer comme récupéré
         setState(() {
           tokenRetrieved = true;
           isTokenRetrieval = false;
         });
 
-        // Programmer les notifications une seule fois
         if (userProfile.id != null) {
           await _setupNotificationsOnce();
         }
 
       } else {
-        // Continuer à réessayer
         if (url.contains('/login') || url.contains('/auth')) {
           print('🔒 Sur page de login, continue à chercher un token... (${tokenRetrievalAttempts}/$maxTokenAttempts)');
         } else {
@@ -355,7 +586,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           isTokenRetrieval = false;
         });
 
-        // Réessayer si pas encore au maximum
         if (tokenRetrievalAttempts < maxTokenAttempts) {
           print('⏰ Prochaine tentative dans 10 secondes...');
           Future.delayed(const Duration(seconds: 10), () {
@@ -375,7 +605,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         isTokenRetrieval = false;
       });
 
-      // Réessayer en cas d'erreur
       if (tokenRetrievalAttempts < maxTokenAttempts) {
         print('⏰ Retry après erreur dans 10 secondes...');
         Future.delayed(const Duration(seconds: 10), () {
@@ -384,7 +613,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       }
     }
   }
-  // NOUVELLE MÉTHODE : Configuration des notifications une seule fois
+
   Future<void> _setupNotificationsOnce() async {
     if (userProfile.id == null || !notificationsInitialized) {
       print('⚠️ Conditions non réunies pour notifications');
@@ -394,16 +623,13 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     try {
       print('📱 Configuration unique des notifications...');
 
-      // Envoyer notification de bienvenue
       await NotificationService.showWelcomeNotification(
         userProfile.firstName,
         userProfile.id!,
       );
 
-      // Récupérer les évaluations
       await fetchUserEvaluations();
 
-      // Programmer les notifications
       await scheduleEvaluationNotifications();
 
       print('✅ Notifications configurées avec succès');
@@ -413,7 +639,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // MODIFIÉE : Extraction de session sans navigation automatique
   Future<Map<String, dynamic>?> extractLaravelSession() async {
     try {
       print('🔍 Extraction session Laravel...');
@@ -447,7 +672,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             sessionInfo.csrf_token = csrfMeta.getAttribute('content');
           }
           
-          // CORRECTION 1 : Forcer le retour à true/false
           const currentUrl = window.location.href;
           const isOnDashboard = currentUrl.includes('/dashboard') || currentUrl.includes('/301/dashboard');
           
@@ -490,7 +714,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       return null;
     }
   }
-  // MODIFIÉE : Récupération profil sans navigation automatique
+
   Future<void> fetchUserProfileViaWebView() async {
     try {
       print('🔍 Récupération profil via API...');
@@ -559,7 +783,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // MODIFIÉE : Traitement réponse API sans navigation
   Future<void> handleApiResponse(String resultString) async {
     try {
       String cleanResult = resultString;
@@ -586,8 +809,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
 
           print('✅ PROFIL RÉCUPÉRÉ: ${userProfile.firstName} (ID: ${userProfile.id})');
 
-          // SUPPRIMÉ : Pas de navigation automatique
-
         } else {
           print('❌ Format API inattendu: $apiData');
         }
@@ -599,7 +820,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // MODIFIÉE : Programmation notifications simplifiée
   Future<void> scheduleEvaluationNotifications() async {
     if (!notificationsInitialized || userProfile.id == null) {
       print('⚠️ Conditions non réunies pour programmer les notifications');
@@ -609,7 +829,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     try {
       print('⏰ Programmation notifications évaluations...');
 
-      // Programmer les rappels automatiques toutes les 8 heures
       await BackgroundNotificationService.scheduleFromEvaluations(
         userProfile.firstName,
         userProfile.id!,
@@ -623,7 +842,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // MODIFIÉE : Vérification rappels simplifiée
   Future<void> _checkBackgroundReminders() async {
     if (!tokenRetrieved || userProfile.id == null) {
       print('⚠️ Token non récupéré ou pas d\'utilisateur');
@@ -647,7 +865,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       print('❌ Notifications non autorisées');
 
       if (Platform.isIOS) {
-        // Demander les permissions iOS
         final bool granted = await NotificationService.requestPermissions();
         setState(() {
           notificationsInitialized = granted;
@@ -680,7 +897,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // MODIFIÉE : Récupération des évaluations avec programmation automatique
   Future<void> fetchUserEvaluations() async {
     if (userProfile.id == null) {
       print('⚠️ Pas d\'utilisateur connecté pour récupérer les évaluations');
@@ -730,7 +946,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     try {
       print('🍎 [iOS] Récupération évaluations...');
 
-      // Version XMLHttpRequest synchrone pour iOS
       await controller.runJavaScript('''
         (function() {
           try {
@@ -878,7 +1093,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 evaluationError = null;
               });
 
-              // Programmer automatiquement les rappels après récupération
               if (evaluations.isNotEmpty && userProfile.id != null && notificationsInitialized) {
                 await BackgroundNotificationService.scheduleFromEvaluations(
                   userProfile.firstName,
@@ -917,6 +1131,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       throw Exception('Aucune information de debug disponible');
     }
   }
+
   // Fonction pour notifier les évaluations urgentes
   Future<void> notifyUrgentEvaluations() async {
     if (!notificationsInitialized || upcomingEvaluations.isEmpty) {
@@ -1098,7 +1313,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     switch (state) {
       case AppLifecycleState.resumed:
         print('📱 App reprise');
-        // Seulement vérifier les rappels si token déjà récupéré
         if (tokenRetrieved) {
           _checkBackgroundReminders();
         }
@@ -1195,6 +1409,49 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 ),
               ),
 
+            // NOUVEAU : Indicateur statut permissions
+            if (permissionsInitialized)
+              Positioned(
+                top: 10,
+                right: 80,
+                child: GestureDetector(
+                  onTap: _showPermissionStatus,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: permissions.values.every((p) => p) ? Colors.green : Colors.orange,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          permissions.values.every((p) => p) ? Icons.security : Icons.warning,
+                          color: Colors.white,
+                          size: 12,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          '${permissions.values.where((p) => p).length}/${permissions.length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
             // Indicateur de récupération du token
             if (isTokenRetrieval)
               Positioned(
@@ -1209,7 +1466,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      SizedBox(
+                      const SizedBox(
                         width: 12,
                         height: 12,
                         child: CircularProgressIndicator(
@@ -1229,6 +1486,96 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   ),
                 ),
               ),
+          ],
+        ),
+      ),
+      
+      // NOUVEAU : Menu d'actions flottant
+      floatingActionButton: tokenRetrieved ? FloatingActionButton(
+        onPressed: () => _showActionsMenu(),
+        backgroundColor: Colors.blue,
+        child: const Icon(Icons.add, color: Colors.white),
+      ) : null,
+    );
+  }
+
+  // NOUVEAU : Menu d'actions
+  void _showActionsMenu() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Actions disponibles',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            
+            // Test caméra
+            ListTile(
+              leading: Icon(
+                Icons.camera_alt,
+                color: permissions['camera']! ? Colors.green : Colors.red,
+              ),
+              title: const Text('Tester la caméra'),
+              subtitle: Text(permissions['camera']! ? 'Autorisée' : 'Non autorisée'),
+              onTap: () {
+                Navigator.pop(context);
+                _testCamera();
+              },
+            ),
+            
+            // Test galerie
+            ListTile(
+              leading: Icon(
+                Icons.photo_library,
+                color: permissions['photos']! ? Colors.green : Colors.red,
+              ),
+              title: const Text('Tester la galerie'),
+              subtitle: Text(permissions['photos']! ? 'Autorisée' : 'Non autorisée'),
+              onTap: () {
+                Navigator.pop(context);
+                _testGallery();
+              },
+            ),
+            
+            // Test fichiers
+            ListTile(
+              leading: Icon(
+                Icons.folder,
+                color: permissions['storage']! ? Colors.green : Colors.red,
+              ),
+              title: const Text('Sélectionner un fichier'),
+              subtitle: Text(permissions['storage']! ? 'Autorisée' : 'Non autorisée'),
+              onTap: () {
+                Navigator.pop(context);
+                _testFilePicker();
+              },
+            ),
+            
+            const Divider(),
+            
+            // Autres actions existantes
+            ListTile(
+              leading: const Icon(Icons.school, color: Colors.blue),
+              title: const Text('Mes évaluations'),
+              onTap: () {
+                Navigator.pop(context);
+                _showEvaluationsBottomSheet();
+              },
+            ),
+            
+            ListTile(
+              leading: const Icon(Icons.notifications, color: Colors.orange),
+              title: const Text('Test notifications'),
+              onTap: () {
+                Navigator.pop(context);
+                testNotifications();
+              },
+            ),
           ],
         ),
       ),
