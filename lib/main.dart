@@ -13,19 +13,15 @@ import 'dart:async';
 import 'notification_service.dart';
 import 'dart:io';
 
-// NOUVELLES PERMISSIONS AJOUTÉES
+// Permissions
 import 'package:permission_handler/permission_handler.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:camera/camera.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialiser les notifications
   await NotificationService.initialize();
-
-  // Initialiser le service de rappels automatiques
   await BackgroundNotificationService.initialize();
 
   runApp(const MyApp());
@@ -51,7 +47,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Modèle pour les données utilisateur
 class UserProfile {
   final int? id;
   final String firstName;
@@ -120,7 +115,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   bool hasError = false;
   int retryCount = 0;
 
-  // NOUVELLES VARIABLES POUR LA GESTION DU TOKEN
   String? sessionToken;
   bool tokenRetrieved = false; 
   bool isTokenRetrieval = false;
@@ -136,7 +130,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   String? evaluationError;
   bool showEvaluations = false;
 
-  // NOUVELLES VARIABLES POUR LES PERMISSIONS
   Map<String, bool> permissions = {
     'camera': false,
     'microphone': false,
@@ -151,36 +144,23 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     initializeNotifications();
     initController();
     WidgetsBinding.instance.addObserver(this);
-
-    // Initialiser les permissions (vérification seulement)
     _initializePermissions();
-
-    // Démarrer la récupération du token une seule fois
     _startTokenRetrieval();
   }
 
-  // FONCTIONS POUR LES PERMISSIONS - CORRIGÉES
-
-  // Initialiser les permissions - MODIFIÉE pour être comme les notifications
   Future<void> _initializePermissions() async {
     try {
-      print('🔐 Initialisation des permissions [${Platform.isIOS ? "iOS" : "Android"}]...');
-      
-      // Vérifier seulement les permissions actuelles, NE PAS les demander
+      print('Initialisation des permissions...');
       await _checkCurrentPermissions();
-      
       setState(() {
         permissionsInitialized = true;
       });
-      
-      print('✅ Permissions initialisées [${Platform.isIOS ? "iOS" : "Android"}]');
-      
+      print('Permissions initialisées');
     } catch (e) {
-      print('❌ Erreur initialisation permissions: $e');
+      print('Erreur initialisation permissions: $e');
     }
   }
 
-  // Vérifier les permissions actuelles
   Future<void> _checkCurrentPermissions() async {
     final results = await Future.wait([
       Permission.camera.status,
@@ -196,275 +176,180 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       permissions['photos'] = results[3].isGranted;
     });
 
-    print('📱 Permissions actuelles: $permissions');
+    print('Permissions actuelles: $permissions');
   }
 
-  // Demander une permission spécifique (inspiré des notifications)
-  Future<bool> _requestSpecificPermission(Permission permission, String permissionName) async {
-    print('🔐 [$permissionName] Demande permission ${Platform.isIOS ? "iOS" : "Android"}...');
+  Future<void> _testCamera() async {
+    print('Test caméra...');
     
     try {
-      final status = await permission.request();
-      print('📱 [${Platform.isIOS ? "iOS" : "Android"}] Résultat $permissionName: $status');
-      return status.isGranted;
-    } catch (e) {
-      print('❌ [$permissionName] Erreur demande permission: $e');
-      return false;
-    }
-  }
-
-  // Vérifier si permission accordée
-  Future<bool> _isPermissionGranted(Permission permission, String permissionName) async {
-    try {
-      final status = await permission.status;
-      print('📋 [$permissionName] Statut actuel: $status');
-      return status.isGranted;
-    } catch (e) {
-      print('❌ [$permissionName] Erreur vérification: $e');
-      return false;
-    }
-  }
-
-// Remplacez ces méthodes dans votre main.dart :
-
-// Tester la caméra - avec API native directe
-Future<void> _testCamera() async {
-  print('📸 Test caméra...');
-  
-  try {
-    // Demander directement via ImagePicker (qui gère les permissions iOS nativement)
-    final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.camera);
-    
-    if (image != null) {
-      // Permission accordée et photo prise
-      setState(() {
-        permissions['camera'] = true;
-      });
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: ImageSource.camera);
       
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('📸 Photo prise: ${image.name}'),
-            backgroundColor: Colors.green,
-          ),
-        );
+      if (image != null) {
+        setState(() {
+          permissions['camera'] = true;
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Photo prise: ${image.name}'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        setState(() {
+          permissions['camera'] = false;
+        });
       }
-    } else {
-      // Vérifier si c'est un refus ou un cancel
+    } catch (e) {
+      print('Erreur caméra: $e');
       setState(() {
         permissions['camera'] = false;
       });
-    }
-  } catch (e) {
-    print('❌ Erreur caméra: $e');
-    setState(() {
-      permissions['camera'] = false;
-    });
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Permission caméra refusée ou erreur'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-}
-
-// Tester la galerie - avec API native directe
-Future<void> _testGallery() async {
-  print('🖼️ Test galerie...');
-  
-  try {
-    final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    
-    if (image != null) {
-      setState(() {
-        permissions['photos'] = true;
-      });
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('🖼️ Image sélectionnée: ${image.name}'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } else {
-      setState(() {
-        permissions['photos'] = false;
-      });
-    }
-  } catch (e) {
-    print('❌ Erreur galerie: $e');
-    setState(() {
-      permissions['photos'] = false;
-    });
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Permission galerie refusée ou erreur'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-}
-
-// Tester fichiers - avec API native directe
-Future<void> _testFilePicker() async {
-  print('📄 Test fichiers...');
-  
-  try {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'png'],
-      allowMultiple: false,
-    );
-
-    if (result != null && result.files.single.name != null) {
-      setState(() {
-        permissions['storage'] = true;
-      });
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('📄 Fichier sélectionné: ${result.files.single.name}'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } else {
-      setState(() {
-        permissions['storage'] = false;
-      });
-    }
-  } catch (e) {
-    print('❌ Erreur fichiers: $e');
-    setState(() {
-      permissions['storage'] = false;
-    });
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Permission fichiers refusée ou erreur'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-}
-
-// Test microphone - utiliser un plugin audio natif si disponible
-Future<void> _testMicrophone() async {
-  print('🎤 Test microphone...');
-  
-  // Pour le microphone, on doit utiliser permission_handler car il n'y a pas d'API directe
-  try {
-    final status = await Permission.microphone.request();
-    
-    setState(() {
-      permissions['microphone'] = status.isGranted;
-    });
-    
-    if (status.isGranted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('🎤 Permission microphone accordée'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Permission microphone refusée'),
+            content: Text('Permission caméra refusée ou erreur'),
             backgroundColor: Colors.red,
           ),
         );
       }
     }
-  } catch (e) {
-    print('❌ Erreur microphone: $e');
-    setState(() {
-      permissions['microphone'] = false;
-    });
-  }
-}
-  // Afficher un dialogue d'autorisation (pour redirection vers paramètres)
-  void _showPermissionDialog(String permissionName, String permissionKey) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Permission $permissionName'),
-        content: Text(
-          'Pour utiliser cette fonctionnalité, OuiBuddy a besoin d\'accéder à votre $permissionName. '
-          'Veuillez autoriser l\'accès dans les paramètres.'
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Plus tard'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              openAppSettings();
-            },
-            child: const Text('Paramètres'),
-          ),
-        ],
-      ),
-    );
   }
 
-  // Afficher le statut des permissions
-  void _showPermissionStatus() {
-    String status = '';
-    permissions.forEach((key, value) {
-      status += '${key.toUpperCase()}: ${value ? "✅" : "❌"}\n';
-    });
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Statut des permissions'),
-        content: Text(status),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+  Future<void> _testGallery() async {
+    print('Test galerie...');
+    
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+      
+      if (image != null) {
+        setState(() {
+          permissions['photos'] = true;
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Image sélectionnée: ${image.name}'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        setState(() {
+          permissions['photos'] = false;
+        });
+      }
+    } catch (e) {
+      print('Erreur galerie: $e');
+      setState(() {
+        permissions['photos'] = false;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Permission galerie refusée ou erreur'),
+            backgroundColor: Colors.red,
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _initializePermissions();
-            },
-            child: const Text('Actualiser'),
-          ),
-        ],
-      ),
-    );
+        );
+      }
+    }
   }
 
-  // FIN DES NOUVELLES FONCTIONS POUR LES PERMISSIONS
+  Future<void> _testFilePicker() async {
+    print('Test fichiers...');
+    
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'png'],
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.single.name != null) {
+        setState(() {
+          permissions['storage'] = true;
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Fichier sélectionné: ${result.files.single.name}'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        setState(() {
+          permissions['storage'] = false;
+        });
+      }
+    } catch (e) {
+      print('Erreur fichiers: $e');
+      setState(() {
+        permissions['storage'] = false;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Permission fichiers refusée ou erreur'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _testMicrophone() async {
+    print('Test microphone...');
+    
+    try {
+      final status = await Permission.microphone.request();
+      
+      setState(() {
+        permissions['microphone'] = status.isGranted;
+      });
+      
+      if (status.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Permission microphone accordée'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Permission microphone refusée'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Erreur microphone: $e');
+      setState(() {
+        permissions['microphone'] = false;
+      });
+    }
+  }
 
   Future<void> _startTokenRetrieval() async {
-    // Attendre 5 secondes que la page se charge
     await Future.delayed(const Duration(seconds: 5));
     await _attemptTokenRetrieval();
   }
 
-  // Initialisation des notifications
   Future<void> initializeNotifications() async {
     try {
       final bool enabled = await NotificationService.areNotificationsEnabled();
@@ -474,26 +359,25 @@ Future<void> _testMicrophone() async {
       });
 
       if (enabled) {
-        print('✅ Notifications système activées');
+        print('Notifications système activées');
       } else {
-        print('⚠️ Notifications système non autorisées');
+        print('Notifications système non autorisées');
         _showNotificationPermissionDialog();
       }
     } catch (e) {
-      print('❌ Erreur initialisation notifications: $e');
+      print('Erreur initialisation notifications: $e');
       setState(() {
         notificationsInitialized = false;
       });
     }
   }
 
-  // Méthode pour demander l'autorisation des notifications
   void _showNotificationPermissionDialog() {
     if (mounted) {
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('🔔 Notifications'),
+          title: const Text('Notifications'),
           content: const Text(
               'Pour recevoir les notifications de bienvenue et autres alertes importantes, '
                   'veuillez autoriser les notifications dans les paramètres de votre appareil.'
@@ -526,29 +410,29 @@ Future<void> _testMicrophone() async {
               isLoading = true;
               hasError = false;
             });
-            print('🌐 Page starting: $url');
+            print('Page starting: $url');
           },
           onPageFinished: (url) {
             setState(() {
               isLoading = false;
             });
-            print('✅ Page finished: $url');
+            print('Page finished: $url');
 
             if (!tokenRetrieved && !isTokenRetrieval &&
                 (url.contains('/dashboard') || url.contains('/301/dashboard'))) {
-              print('🎯 Arrivée sur dashboard détectée, démarrage récupération token');
+              print('Arrivée sur dashboard détectée');
               Future.delayed(const Duration(seconds: 2), () {
                 _attemptTokenRetrieval();
               });
             }
           },
           onWebResourceError: (error) {
-            print('❌ Web resource error: ${error.errorCode} - ${error.description}');
+            print('Web resource error: ${error.errorCode} - ${error.description}');
 
             if (error.errorCode == -1 || error.description.contains('ERR_CACHE_MISS')) {
               if (retryCount < 3) {
                 retryCount++;
-                print('🔄 Retry attempt $retryCount');
+                print('Retry attempt $retryCount');
                 reloadPage();
               } else {
                 setState(() {
@@ -559,13 +443,13 @@ Future<void> _testMicrophone() async {
             }
           },
           onNavigationRequest: (request) {
-            print('🧭 Navigation vers: ${request.url}');
+            print('Navigation vers: ${request.url}');
 
             if (!request.url.startsWith('https://ouibuddy.com')) {
               if (request.url.contains('stripe') ||
                   request.url.contains('payment') ||
                   request.url.contains('checkout')) {
-                print('🚫 Lien de paiement bloqué: ${request.url}');
+                print('Lien de paiement bloqué: ${request.url}');
                 return NavigationDecision.prevent;
               }
 
@@ -598,7 +482,7 @@ Future<void> _testMicrophone() async {
 
   Future<void> _attemptTokenRetrieval() async {
     if (isTokenRetrieval || tokenRetrieved || tokenRetrievalAttempts >= maxTokenAttempts) {
-      print('⚠️ Récupération token déjà en cours ou terminée');
+      print('Récupération token déjà en cours ou terminée');
       return;
     }
 
@@ -607,13 +491,13 @@ Future<void> _testMicrophone() async {
     });
 
     tokenRetrievalAttempts++;
-    print('🔍 Tentative de récupération token #$tokenRetrievalAttempts/$maxTokenAttempts');
+    print('Tentative de récupération token #$tokenRetrievalAttempts/$maxTokenAttempts');
 
     try {
       final currentUrl = await controller.runJavaScriptReturningResult('window.location.href');
       final url = currentUrl?.toString().replaceAll('"', '') ?? '';
 
-      print('🌐 URL actuelle pour token: $url');
+      print('URL actuelle pour token: $url');
 
       final sessionInfo = await extractLaravelSession();
 
@@ -621,16 +505,13 @@ Future<void> _testMicrophone() async {
 
       if (sessionInfo != null) {
         final activeSession = sessionInfo['hasActiveSession'];
-
         hasValidSession = activeSession == true ||
             (activeSession is String && activeSession.isNotEmpty);
-
-        print('🔍 Session active détectée: $hasValidSession (type: ${activeSession.runtimeType})');
+        print('Session active détectée: $hasValidSession');
       }
 
       if (hasValidSession) {
-        print('✅ Token/Session récupéré avec succès après $tokenRetrievalAttempts tentatives');
-
+        print('Token/Session récupéré avec succès');
         await fetchUserProfileViaWebView();
 
         setState(() {
@@ -641,39 +522,30 @@ Future<void> _testMicrophone() async {
         if (userProfile.id != null) {
           await _setupNotificationsOnce();
         }
-
       } else {
-        if (url.contains('/login') || url.contains('/auth')) {
-          print('🔒 Sur page de login, continue à chercher un token... (${tokenRetrievalAttempts}/$maxTokenAttempts)');
-        } else {
-          print('❌ Pas de token trouvé sur $url (${tokenRetrievalAttempts}/$maxTokenAttempts)');
-        }
-
         setState(() {
           isTokenRetrieval = false;
         });
 
         if (tokenRetrievalAttempts < maxTokenAttempts) {
-          print('⏰ Prochaine tentative dans 10 secondes...');
+          print('Prochaine tentative dans 10 secondes...');
           Future.delayed(const Duration(seconds: 10), () {
             _attemptTokenRetrieval();
           });
         } else {
-          print('🚫 Maximum de tentatives atteint (${maxTokenAttempts}) pour le token');
+          print('Maximum de tentatives atteint');
           setState(() {
             userProfile = UserProfile.notAuthenticated();
           });
         }
       }
-
     } catch (e) {
-      print('❌ Erreur récupération token: $e');
+      print('Erreur récupération token: $e');
       setState(() {
         isTokenRetrieval = false;
       });
 
       if (tokenRetrievalAttempts < maxTokenAttempts) {
-        print('⏰ Retry après erreur dans 10 secondes...');
         Future.delayed(const Duration(seconds: 10), () {
           _attemptTokenRetrieval();
         });
@@ -683,33 +555,26 @@ Future<void> _testMicrophone() async {
 
   Future<void> _setupNotificationsOnce() async {
     if (userProfile.id == null || !notificationsInitialized) {
-      print('⚠️ Conditions non réunies pour notifications');
+      print('Conditions non réunies pour notifications');
       return;
     }
 
     try {
-      print('📱 Configuration unique des notifications...');
-
+      print('Configuration unique des notifications...');
       await NotificationService.showWelcomeNotification(
         userProfile.firstName,
         userProfile.id!,
       );
-
       await fetchUserEvaluations();
-
       await scheduleEvaluationNotifications();
-
-      print('✅ Notifications configurées avec succès');
-
+      print('Notifications configurées avec succès');
     } catch (e) {
-      print('❌ Erreur configuration notifications: $e');
+      print('Erreur configuration notifications: $e');
     }
   }
 
   Future<Map<String, dynamic>?> extractLaravelSession() async {
     try {
-      print('🔍 Extraction session Laravel...');
-
       final result = await controller.runJavaScriptReturningResult('''
       (function() {
         try {
@@ -758,34 +623,27 @@ Future<void> _testMicrophone() async {
 
       if (result != null && result.toString() != 'null') {
         String cleanResult = result.toString();
-
         if (cleanResult.startsWith('"') && cleanResult.endsWith('"')) {
           cleanResult = cleanResult.substring(1, cleanResult.length - 1);
         }
-
         cleanResult = cleanResult.replaceAll('\\"', '"');
         cleanResult = cleanResult.replaceAll('\\\\', '\\');
 
         final sessionData = json.decode(cleanResult);
-        print('🍪 Session data: $sessionData');
-
         if (sessionData['hasActiveSession'] == true) {
           sessionToken = sessionData['laravel_session'] ?? 'dashboard_session';
           return sessionData;
         }
       }
-
       return null;
     } catch (e) {
-      print('❌ Erreur extraction session: $e');
+      print('Erreur extraction session: $e');
       return null;
     }
   }
 
   Future<void> fetchUserProfileViaWebView() async {
     try {
-      print('🔍 Récupération profil via API...');
-
       final result = await controller.runJavaScriptReturningResult('''
       (function() {
         try {
@@ -823,14 +681,12 @@ Future<void> _testMicrophone() async {
                 error: 'Erreur HTTP ' + xhr.status
               });
             }
-            
           } catch (networkError) {
             return JSON.stringify({
               success: false,
               error: 'Erreur réseau: ' + networkError.message
             });
           }
-          
         } catch (globalError) {
           return JSON.stringify({
             success: false,
@@ -842,76 +698,56 @@ Future<void> _testMicrophone() async {
 
       if (result != null && result.toString() != 'null') {
         await handleApiResponse(result.toString());
-      } else {
-        print('❌ Pas de résultat API');
       }
     } catch (e) {
-      print('❌ Erreur récupération profil: $e');
+      print('Erreur récupération profil: $e');
     }
   }
 
   Future<void> handleApiResponse(String resultString) async {
     try {
       String cleanResult = resultString;
-
       if (cleanResult.startsWith('"') && cleanResult.endsWith('"')) {
         cleanResult = cleanResult.substring(1, cleanResult.length - 1);
       }
-
       cleanResult = cleanResult.replaceAll('\\"', '"');
       cleanResult = cleanResult.replaceAll('\\\\', '\\');
 
       final response = json.decode(cleanResult);
-      print('📡 Réponse API: $response');
 
       if (response['success'] == true && response['data'] != null) {
         final apiData = response['data'];
-
         if (apiData['success'] == true && apiData['data'] != null) {
           final profileData = apiData['data'];
-
           setState(() {
             userProfile = UserProfile.fromJson(profileData);
           });
-
-          print('✅ PROFIL RÉCUPÉRÉ: ${userProfile.firstName} (ID: ${userProfile.id})');
-
-        } else {
-          print('❌ Format API inattendu: $apiData');
+          print('PROFIL RÉCUPÉRÉ: ${userProfile.firstName} (ID: ${userProfile.id})');
         }
-      } else {
-        print('❌ Échec API: $response');
       }
     } catch (parseError) {
-      print('❌ Erreur parsing API: $parseError');
+      print('Erreur parsing API: $parseError');
     }
   }
 
   Future<void> scheduleEvaluationNotifications() async {
     if (!notificationsInitialized || userProfile.id == null) {
-      print('⚠️ Conditions non réunies pour programmer les notifications');
       return;
     }
 
     try {
-      print('⏰ Programmation notifications évaluations...');
-
       await BackgroundNotificationService.scheduleFromEvaluations(
         userProfile.firstName,
         userProfile.id!,
         upcomingEvaluations,
       );
-
-      print('✅ Notifications programmées avec succès');
-
     } catch (e) {
-      print('❌ Erreur programmation notifications: $e');
+      print('Erreur programmation notifications: $e');
     }
   }
 
   Future<void> _checkBackgroundReminders() async {
     if (!tokenRetrieved || userProfile.id == null) {
-      print('⚠️ Token non récupéré ou pas d\'utilisateur');
       return;
     }
 
@@ -922,21 +758,17 @@ Future<void> _testMicrophone() async {
         upcomingEvaluations,
       );
     } catch (e) {
-      print('❌ Erreur vérification rappels: $e');
+      print('Erreur vérification rappels: $e');
     }
   }
 
-  // Méthode de test des notifications
   Future<void> testNotifications() async {
     if (!notificationsInitialized) {
-      print('❌ Notifications non autorisées');
-
       if (Platform.isIOS) {
         final bool granted = await NotificationService.requestPermissions();
         setState(() {
           notificationsInitialized = granted;
         });
-
         if (!granted) {
           _showNotificationPermissionDialog();
           return;
@@ -949,26 +781,22 @@ Future<void> _testMicrophone() async {
 
     try {
       await NotificationService.showTestNotification(userProfile.firstName);
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('📱 [${Platform.isIOS ? "iOS" : "Android"}] Notification de test envoyée !'),
+            content: Text('Notification de test envoyée !'),
             backgroundColor: Colors.blue,
             duration: const Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
-      print('❌ Erreur test notifications: $e');
+      print('Erreur test notifications: $e');
     }
   }
 
   Future<void> fetchUserEvaluations() async {
-    if (userProfile.id == null) {
-      print('⚠️ Pas d\'utilisateur connecté pour récupérer les évaluations');
-      return;
-    }
+    if (userProfile.id == null) return;
 
     setState(() {
       isLoadingEvaluations = true;
@@ -976,18 +804,12 @@ Future<void> _testMicrophone() async {
     });
 
     try {
-      print('📚 === DEBUG API ÉVALUATIONS ===');
-      print('👤 Utilisateur: ${userProfile.firstName} (ID: ${userProfile.id})');
-      print('📱 Plateforme: ${Platform.isIOS ? "iOS" : "Android"}');
-
       if (Platform.isIOS) {
         await fetchUserEvaluationsIOS();
       } else {
         await fetchUserEvaluationsAndroid();
       }
-
     } catch (e) {
-      print('❌ Erreur générale: $e');
       setState(() {
         evaluationError = 'Erreur: ${e.toString()}';
         isLoadingEvaluations = false;
@@ -995,24 +817,11 @@ Future<void> _testMicrophone() async {
         evaluationSummary = null;
         showEvaluations = false;
       });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
     }
   }
 
-  // Version iOS des évaluations (XMLHttpRequest synchrone)
   Future<void> fetchUserEvaluationsIOS() async {
     try {
-      print('🍎 [iOS] Récupération évaluations...');
-
       await controller.runJavaScript('''
         (function() {
           try {
@@ -1061,17 +870,14 @@ Future<void> _testMicrophone() async {
 
       await Future.delayed(const Duration(seconds: 3));
       await processEvaluationResults();
-
     } catch (e) {
-      print('❌ [iOS] Erreur évaluations: $e');
       setState(() {
-        evaluationError = '[iOS] ${e.toString()}';
+        evaluationError = 'Erreur iOS: ${e.toString()}';
         isLoadingEvaluations = false;
       });
     }
   }
 
-  // Version Android (logique existante avec fetch)
   Future<void> fetchUserEvaluationsAndroid() async {
     await controller.runJavaScript('''
       fetch('/api/upcoming-evaluations?days_ahead=14&include_today=true&per_page=50', {
@@ -1109,7 +915,6 @@ Future<void> _testMicrophone() async {
     await processEvaluationResults();
   }
 
-  // Méthode commune pour traiter les résultats des évaluations
   Future<void> processEvaluationResults() async {
     final debugInfo = await controller.runJavaScriptReturningResult('''
       JSON.stringify({
@@ -1131,7 +936,6 @@ Future<void> _testMicrophone() async {
         cleanDebugInfo = cleanDebugInfo.replaceAll('\\"', '"');
 
         final debug = json.decode(cleanDebugInfo);
-        print('🔍 [${Platform.isIOS ? "iOS" : "Android"}] Debug info: $debug');
 
         if ((debug['status'] == 'success' || debug['status'] == 'ios_success') && debug['hasData'] == true) {
           final fullData = await controller.runJavaScriptReturningResult('''
@@ -1166,144 +970,18 @@ Future<void> _testMicrophone() async {
                   userProfile.id!,
                   evaluations,
                 );
-                print('🔄 Rappels automatiques (8h) mis à jour avec ${evaluations.length} évaluations');
               }
-
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('✅ [${Platform.isIOS ? "iOS" : "Android"}] ${evaluations.length} évaluations trouvées !'),
-                    backgroundColor: Colors.green,
-                    duration: const Duration(seconds: 3),
-                  ),
-                );
-              }
-
             } catch (parseError) {
-              print('❌ Erreur parsing avec EvaluationService: $parseError');
               throw parseError;
             }
-          } else {
-            throw Exception('Impossible de récupérer les données complètes');
           }
-        } else {
-          String errorMsg = debug['error']?.toString() ?? 'Erreur de récupération des données';
-          throw Exception(errorMsg);
         }
       } catch (e) {
-        print('❌ Erreur traitement debug: $e');
         throw e;
       }
-    } else {
-      throw Exception('Aucune information de debug disponible');
     }
   }
 
-  // Fonction pour notifier les évaluations urgentes
-  Future<void> notifyUrgentEvaluations() async {
-    if (!notificationsInitialized || upcomingEvaluations.isEmpty) {
-      print('⚠️ Notifications non autorisées ou aucune évaluation');
-      return;
-    }
-
-    try {
-      final urgentEvaluations = upcomingEvaluations.where((eval) =>
-      eval.isToday || eval.isTomorrow || eval.daysUntil <= 2
-      ).toList();
-
-      if (urgentEvaluations.isEmpty) {
-        print('📱 Aucune évaluation urgente à notifier');
-        return;
-      }
-
-      print('🚨 ${urgentEvaluations.length} évaluations urgentes trouvées');
-
-      for (final eval in urgentEvaluations) {
-        String title = '';
-        bool isImportant = false;
-
-        if (eval.isToday) {
-          title = '⚠️ Évaluation AUJOURD\'HUI !';
-          isImportant = true;
-        } else if (eval.isTomorrow) {
-          title = '📅 Évaluation DEMAIN';
-          isImportant = true;
-        } else {
-          title = '📚 Évaluation dans ${eval.daysUntil} jours';
-          isImportant = false;
-        }
-
-        String body = '';
-        if (eval.topicCategory?.name != null) {
-          body += '${eval.topicCategory!.name}: ';
-        }
-        body += eval.description ?? 'Évaluation';
-        body += '\n📅 ${eval.evaluationDateFormatted}';
-
-        await NotificationService.showNotification(
-          id: 100 + eval.id,
-          title: title,
-          body: body,
-          payload: 'evaluation_${eval.id}',
-          isImportant: isImportant,
-        );
-
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-
-      if (urgentEvaluations.length > 1) {
-        final todayCount = urgentEvaluations.where((e) => e.isToday).length;
-        final tomorrowCount = urgentEvaluations.where((e) => e.isTomorrow).length;
-        final soonCount = urgentEvaluations.where((e) => !e.isToday && !e.isTomorrow).length;
-
-        String summaryBody = '';
-        if (todayCount > 0) {
-          summaryBody += '$todayCount aujourd\'hui';
-        }
-        if (tomorrowCount > 0) {
-          if (summaryBody.isNotEmpty) summaryBody += ', ';
-          summaryBody += '$tomorrowCount demain';
-        }
-        if (soonCount > 0) {
-          if (summaryBody.isNotEmpty) summaryBody += ', ';
-          summaryBody += '$soonCount bientôt';
-        }
-
-        await NotificationService.showNotification(
-          id: 200,
-          title: '📚 Résumé: ${urgentEvaluations.length} évaluations urgentes',
-          body: summaryBody,
-          payload: 'evaluations_summary',
-          isImportant: todayCount > 0,
-        );
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('📱 [${Platform.isIOS ? "iOS" : "Android"}] ${urgentEvaluations.length} notifications envoyées pour les évaluations urgentes'),
-            backgroundColor: urgentEvaluations.any((e) => e.isToday) ? Colors.red : Colors.orange,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-
-    } catch (e) {
-      print('❌ Erreur envoi notifications évaluations: $e');
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Erreur notifications: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    }
-  }
-
-  // Afficher les évaluations dans un bottom sheet
   void _showEvaluationsBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -1326,16 +1004,15 @@ Future<void> _testMicrophone() async {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-
             Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
                   const Icon(Icons.school, color: Colors.blue),
                   const SizedBox(width: 8),
-                  Text(
-                    'Mes évaluations ${Platform.isIOS ? "🍎" : "🤖"}',
-                    style: const TextStyle(
+                  const Text(
+                    'Mes évaluations',
+                    style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
@@ -1355,9 +1032,7 @@ Future<void> _testMicrophone() async {
                 ],
               ),
             ),
-
             const Divider(height: 1),
-
             Expanded(
               child: EvaluationsList(
                 evaluations: upcomingEvaluations,
@@ -1376,108 +1051,85 @@ Future<void> _testMicrophone() async {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-
     switch (state) {
       case AppLifecycleState.resumed:
-        print('📱 App reprise');
         if (tokenRetrieved) {
           _checkBackgroundReminders();
         }
         break;
-      case AppLifecycleState.paused:
-        print('📱 App en pause - rappels automatiques (8h) continuent');
-        break;
-      case AppLifecycleState.detached:
-        print('📱 App fermée - rappels automatiques (8h) actifs');
-        break;
-      case AppLifecycleState.inactive:
-        print('📱 App inactive');
-        break;
-      case AppLifecycleState.hidden:
-        print('📱 App cachée');
+      default:
         break;
     }
   }
 
- @override
-Widget build(BuildContext context) {
-  return Scaffold(
-    body: SafeArea(
-      child: Stack(
-        children: [
-          // WebView principal
-          WebViewWidget(controller: controller),
-
-          // Indicateur de chargement
-          if (isLoading)
-            const Center(
-              child: CircularProgressIndicator(),
-            ),
-
-          // Indicateur d'erreur
-          if (hasError)
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.red, size: 50),
-                  const SizedBox(height: 20),
-                  const Text('Impossible de charger la page'),
-                  const SizedBox(height: 20),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      retryCount = 0;
-                      loadDirectUrl();
-                    },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Réessayer'),
-                  ),
-                ],
-              ),
-            ),
-
-          // Indicateur de récupération du token
-          if (isTokenRetrieval)
-            Positioned(
-              top: 10,
-              right: 20,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.blue,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Stack(
+          children: [
+            WebViewWidget(controller: controller),
+            if (isLoading)
+              const Center(child: CircularProgressIndicator()),
+            if (hasError)
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Token $tokenRetrievalAttempts/$maxTokenAttempts',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                      ),
+                    const Icon(Icons.error_outline, color: Colors.red, size: 50),
+                    const SizedBox(height: 20),
+                    const Text('Impossible de charger la page'),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        retryCount = 0;
+                        loadDirectUrl();
+                      },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Réessayer'),
                     ),
                   ],
                 ),
               ),
-            ),
-        ],
+            if (isTokenRetrieval)
+              Positioned(
+                top: 10,
+                right: 20,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.blue,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Token $tokenRetrievalAttempts/$maxTokenAttempts',
+                        style: const TextStyle(color: Colors.white, fontSize: 10),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
-@override
-void dispose() {
-  WidgetsBinding.instance.removeObserver(this);
-  super.dispose();
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 }
